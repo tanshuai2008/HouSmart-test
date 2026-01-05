@@ -3,11 +3,16 @@ import urllib.parse
 import random
 import state_data
 
+def log_debug(msg):
+
 # Map state FIPS to state names for benchmark lookup if needed
 # (Or we can reverse look up from state_data if we had FIPS mapping, 
 # but for now let's hope we rely on the address or simple mapping if needed)
 # Actually, the Census Geocoder returns State Name usually.
 
+
+    with open("debug_log.txt", "a") as f:
+        f.write(f"{str(msg)}\n")
 
 def get_coordinates(address, api_key):
     """
@@ -125,10 +130,10 @@ class CensusDataService:
                         "block_group": geo['BLKGRP']
                     }
         except Exception as e:
-            print(f"Census Geocoder Error: {e}")
+            log_debug(f"Census Geocoder Error: {e}")
 
         # B. Fallback: Geoapify -> FCC Block API (Good for landmarks/pois)
-        print("Fallback: Using Geoapify + FCC API")
+        log_debug("Fallback: Using Geoapify + FCC API")
         lat, lon = get_coordinates(address, None) # Uses default if no key, but assume key is likely present or defaulting to NY
         
         # If get_coordinates returns default coordinates because of missing key, this might not be accurate for arbitrary input,
@@ -204,10 +209,17 @@ class CensusDataService:
                             idx = headers.index(code)
                             val = data_row[idx]
                             # Clean up values (negative numbers often mean missing data in Census)
-                            if val and int(val) > 0:
-                                result[code] = int(val)
-                            else:
-                                result[code] = None
+                            if val:
+                                try:
+                                    num_val = float(val)
+                                    if num_val > 0:
+                                        # Store as int if integer, else float
+                                        if num_val.is_integer():
+                                            result[code] = int(num_val)
+                                        else:
+                                            result[code] = num_val
+                                except ValueError:
+                                    pass
                     return result
         except Exception as e:
             print(f"ACS API Error: {e}")
@@ -317,23 +329,32 @@ def get_census_data(address):
     """
     Main entry point for App to get Census Data.
     """
-    service = CensusDataService()
-    
-    # 1. Geocode
-    geo_data = service.get_census_geoid(address)
-    if not geo_data:
+    log_debug(f"Starting Census Fetch for: {address}")
+    try:
+        service = CensusDataService()
+        
+        # 1. Geocode
+        geo_data = service.get_census_geoid(address)
+        log_debug(f"Geode Result: {geo_data}")
+        
+        if not geo_data:
+            return None
+            
+        # 2. Get Data
+        acs_data = service.get_acs_data(geo_data)
+        log_debug(f"ACS Result Count: {len(acs_data) if acs_data else 0}")
+        
+        # 3. Compare & Compile
+        final_result = service.compare_with_benchmarks(acs_data, geo_data)
+        log_debug(f"Final Result Keys: {final_result.keys() if final_result else 'None'}")
+        
+        if final_result:
+            final_result['source'] = "US Census Bureau (2022 ACS 5-year)"
+            
+        return final_result
+    except Exception as e:
+        log_debug(f"CRITICAL ERROR in get_census_data: {e}")
         return None
-        
-    # 2. Get Data
-    acs_data = service.get_acs_data(geo_data)
-    
-    # 3. Compare & Compile
-    final_result = service.compare_with_benchmarks(acs_data, geo_data)
-    
-    if final_result:
-        final_result['source'] = "US Census Bureau (2024 ACS 5-year)"
-        
-    return final_result
 
 def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key):
     """
