@@ -369,11 +369,74 @@ if st.session_state.analyzed:
         c_1, c_2 = st.columns(2)
         with c_1:
             st.altair_chart(chart_income, use_container_width=True)
-            st.info("Education: Local Data Unavailable")
+            
+            # Education Chart
+            # Local: Bachelor+ Pct vs State Bachelor+ (roughly)
+            local_bach = metrics.get('education_bachelors_pct', 0)
+            if local_bach == "N/A": local_bach = 0
+            
+            state_edu = benchmarks.get('state_edu', [0,0,0])
+            state_bach = state_edu[1] if state_edu else 0 # Benchmark is [HS+, Bach+, Adv+]
+            
+            df_edu = pd.DataFrame([
+                {"Region": "State", "Pct": state_bach, "Color": "#1A73E8"},
+                {"Region": "Local", "Pct": local_bach, "Color": "#0F1C2E"}
+            ])
+            
+            chart_edu = alt.Chart(df_edu).mark_bar().encode(
+                x=alt.X('Region', sort=["State", "Local"]),
+                y=alt.Y('Pct', title='Bachelor+ (%)'),
+                color=alt.Color('Region', scale=alt.Scale(domain=['State','Local'], range=['#1A73E8', '#0F1C2E'])),
+                tooltip=['Region', 'Pct']
+            ).properties(title="Education (Bachelor+)", height=180)
+            
+            st.altair_chart(chart_edu, use_container_width=True)
             
         with c_2:
-            st.info("Age: Local Data Unavailable")
-            st.info("Race: Local Data Unavailable")
+            # Race Chart (Pie or Bar) - Let's do Bar for simplicity and comparison if State data available
+            # We have local race dict: {White, Black, Asian...}
+            # We have state race list: [White, Hisp, Black, Asian, Other] -> Be careful with order
+            local_race = metrics.get('race', {})
+            state_race = benchmarks.get('state_race', [])
+            
+            # Helper to align keys
+            # State order: White(0), Hispanic(1), Black(2), Asian(3), Other(4)
+            data_race = []
+            keys = ["White", "Hispanic", "Black", "Asian", "Other"]
+            
+            if local_race:
+                for k in keys:
+                    data_race.append({"Demographic": k, "Source": "Local", "Pct": local_race.get(k, 0), "Color": "#0F1C2E"})
+                    
+            if state_race and len(state_race) == 5:
+                # Add State benchmarks
+                data_race.append({"Demographic": "White", "Source": "State", "Pct": state_race[0], "Color": "#1A73E8"})
+                data_race.append({"Demographic": "Hispanic", "Source": "State", "Pct": state_race[1], "Color": "#1A73E8"})
+                data_race.append({"Demographic": "Black", "Source": "State", "Pct": state_race[2], "Color": "#1A73E8"})
+                data_race.append({"Demographic": "Asian", "Source": "State", "Pct": state_race[3], "Color": "#1A73E8"})
+                data_race.append({"Demographic": "Other", "Source": "State", "Pct": state_race[4], "Color": "#1A73E8"})
+
+            if data_race:
+                df_race = pd.DataFrame(data_race)
+                chart_race = alt.Chart(df_race).mark_bar().encode(
+                    x=alt.X('Demographic', sort=keys),
+                    y=alt.Y('Pct', title='Percentage'),
+                    xOffset='Source', # Grouped bar
+                    color=alt.Color('Source', scale=alt.Scale(domain=['State','Local'], range=['#1A73E8', '#0F1C2E'])),
+                    tooltip=['Demographic', 'Source', 'Pct']
+                ).properties(title="Race Demographics", height=180)
+                st.altair_chart(chart_race, use_container_width=True)
+            else:
+                st.info("Race: Data Unavailable")
+
+            # Age (Median) Display
+            st.markdown("##### Median Age")
+            local_age = metrics.get('median_age', "N/A")
+            if local_age != "N/A":
+                st.metric("Local Median Age", local_age)
+            else:
+                 st.info("Age Data Unavailable")
+            st.caption("Detailed Age buckets not loaded for preview.")
             
         st.markdown('</div>', unsafe_allow_html=True)
         
