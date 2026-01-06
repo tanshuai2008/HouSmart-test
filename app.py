@@ -345,23 +345,6 @@ if st.session_state.processing:
                 st.session_state.processing = False
                 st.stop()
                 
-            # Logging
-            st.write("Logging request...")
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            try:
-                 # CSV Log
-                 log_dir = "logs"
-                 if not os.path.exists(log_dir): os.makedirs(log_dir)
-                 with open(os.path.join(log_dir, "usage_logs.csv"), 'a', newline='', encoding='utf-8') as f:
-                     writer = csv.writer(f)
-                     writer.writerow([timestamp, user_email, address])
-                 # GSheet Log
-                 sheet = connect_to_gsheet()
-                 if sheet: sheet.append_row([timestamp, user_email, address])
-            except Exception as e:
-                print(f"Logging Error: {e}")
-            
-            
             # 1. POI
             status.update(label="Fetching Location Data...", state="running")
             st.write("Searching nearby amenities...")
@@ -439,6 +422,58 @@ if st.session_state.processing:
             
             st.session_state.census = census
             
+            # --- FINAL LOGGING (Tokens & RPM) ---
+            st.write("Finalizing logs...")
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_dir = "logs"
+            log_file = os.path.join(log_dir, "usage_logs.csv")
+            if not os.path.exists(log_dir): os.makedirs(log_dir)
+            
+            # Calculate RPM from local logs
+            estimated_rpm = 1
+            try:
+                if os.path.exists(log_file):
+                    with open(log_file, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                        # Simple check: Count lines with timestamp in last 60s
+                        # Assuming timestamp is first column
+                        current_time = datetime.datetime.now()
+                        recent_count = 0
+                        for line in lines[-50:]: # Check last 50 lines only for speed
+                            parts = line.split(',')
+                            if parts:
+                                try:
+                                    # Handle potential quoting in CSV
+                                    ts_str = parts[0].replace('"', '')
+                                    row_time = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                                    if (current_time - row_time).total_seconds() < 60:
+                                        recent_count += 1
+                                except:
+                                    pass
+                        estimated_rpm = recent_count + 1 # +1 for current
+            except Exception as e:
+                print(f"RPM Calc Error: {e}")
+
+            # Extract Token Usage
+            usage = analysis.get('_usage_meta', {})
+            p_tokens = usage.get('prompt_tokens', 0)
+            c_tokens = usage.get('candidates_tokens', 0)
+            t_tokens = usage.get('total_tokens', 0)
+            
+            try:
+                 # CSV Log
+                 # Schema: Timestamp, Email, Address, PromptTokens, CompletionTokens, TotalTokens, EstRPM
+                 with open(log_file, 'a', newline='', encoding='utf-8') as f:
+                     writer = csv.writer(f)
+                     writer.writerow([timestamp, user_email, address, p_tokens, c_tokens, t_tokens, estimated_rpm])
+                 
+                 # GSheet Log (Extended)
+                 sheet = connect_to_gsheet()
+                 if sheet: 
+                     sheet.append_row([timestamp, user_email, address, p_tokens, c_tokens, t_tokens, estimated_rpm])
+            except Exception as e:
+                print(f"Logging Error: {e}")
+
             status.update(label="Analysis Complete!", state="complete", expanded=False)
             
         st.session_state.processing = False
