@@ -21,7 +21,6 @@ def start_processing():
     st.session_state.processing = True
 
 def finish_processing():
-def finish_processing():
     st.session_state.processing = False
 
 # Helper: Get Daily Usage
@@ -307,8 +306,6 @@ with col2:
 
 # --- COLUMN 3: MAP (40%) ---
 with col3:
-    # Card E: Interactive Map
-    with st.container(border=True):
     # Card E: Interactive Map
     with st.container(border=True):
         st.subheader("Location Intelligence")
