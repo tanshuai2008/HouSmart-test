@@ -1,6 +1,8 @@
 import google.generativeai as genai
 import os
 import json
+import time
+import random
 
 import google.api_core.exceptions
 
@@ -31,9 +33,36 @@ def configure_genai(api_keys):
         return True
     return False
 
+def call_with_retry(func, max_retries=5):
+    """
+    Execute a function with exponential backoff for 429/ResourceExhausted errors.
+    Waits (2^i + jitter) seconds between retries.
+    """
+    for i in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            # Check for Quota/429 errors
+            is_quota_error = False
+            if isinstance(e, google.api_core.exceptions.ResourceExhausted):
+                is_quota_error = True
+            elif "quota" in str(e).lower() or "429" in str(e).lower():
+                is_quota_error = True
+            
+            # If it's not a quota error, or if it's the last retry, re-raise
+            if not is_quota_error or i == max_retries - 1:
+                raise e
+            
+            # Exponential Backoff
+            wait_time = (2 ** i) + random.uniform(0, 1)
+            print(f"Quota hit. Retrying in {wait_time:.2f}s... (Attempt {i+1}/{max_retries})")
+            time.sleep(wait_time)
+    return None
+
 def call_with_rotation(func_to_call, *args, **kwargs):
     """
     Helper to call a GenAI function with key rotation on quota error.
+    Includes internal retry logic per key.
     """
     global _GEMINI_KEYS
     
@@ -42,24 +71,26 @@ def call_with_rotation(func_to_call, *args, **kwargs):
         try:
             # Re-configure with current key
             genai.configure(api_key=key)
-            return func_to_call(*args, **kwargs)
-        except google.api_core.exceptions.ResourceExhausted as e:
-            print(f"Key {i} exhausted. Rotating...")
-            if i == len(_GEMINI_KEYS) - 1:
-                # Last key failed
-                print("All keys exhausted.")
-                raise e # Re-raise if no more keys
+            
+            # Use retry logic for THIS key
+            # We wrap the call in a lambda so call_with_retry can execute it
+            return call_with_retry(lambda: func_to_call(*args, **kwargs))
+            
         except Exception as e:
-            # If it's not a quota error, verify if text indicates quota
-            # Sometimes specific quota errors are just generic 429s wrapped differently
-            lower_err = str(e).lower()
-            if "quota" in lower_err or "429" in lower_err:
-                 print(f"Key {i} quota/429 error. Rotating...")
-                 if i == len(_GEMINI_KEYS) - 1:
+            # Check if we should rotate
+            is_quota_error = False
+            if isinstance(e, google.api_core.exceptions.ResourceExhausted):
+                is_quota_error = True
+            elif "quota" in str(e).lower() or "429" in str(e).lower():
+                is_quota_error = True
+
+            if is_quota_error:
+                print(f"Key {i} exhausted after retries. Rotating...")
+                if i == len(_GEMINI_KEYS) - 1:
                     print("All keys exhausted.")
                     raise e
             else:
-                # Other error, re-raise immediately
+                # Other error (e.g. 400, 500), re-raise immediately
                 raise e
     return None
 
