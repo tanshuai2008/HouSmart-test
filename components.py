@@ -38,6 +38,16 @@ def get_base_css():
             background-color: var(--app-bg-color);
         }
         
+        /* Hide Default Streamlit Header */
+        header[data-testid="stHeader"] {
+            display: none !important;
+        }
+        
+        /* Reduce default top padding to accommodate our header */
+        .block-container {
+            padding-top: 1rem !important;
+        }
+        
         /* Fixed Header */
         .fixed-header {
             position: fixed;
@@ -45,15 +55,16 @@ def get_base_css():
             left: 0;
             width: 100%;
             height: var(--header-h);
-            background: rgba(255, 255, 255, 0.85);
+            background: rgba(255, 255, 255, 0.95); /* More opaque */
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            z-index: 1000;
+            z-index: 999999; /* Max Z-index */
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 0 40px;
             border-bottom: 1px solid var(--light-border);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
         }
         
         .header-logo {

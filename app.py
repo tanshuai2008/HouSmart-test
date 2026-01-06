@@ -170,6 +170,32 @@ c_left, c_mid, c_right = st.columns([20, 40, 40], gap="medium")
 with c_left:
     st.markdown('<div class="panel-container">', unsafe_allow_html=True)
     
+    st.markdown('<div class="panel-container">', unsafe_allow_html=True)
+    
+    # --- Email Input (Required) ---
+    st.markdown(
+        """
+        <div style="border: 2px solid #EA4335; padding: 12px; border-radius: 6px; margin-bottom: 20px; background-color: #FEF7F6;">
+            <div style="color: #EA4335; font-size: 12px; font-weight: 600; margin-bottom: 4px;">REQUIRED</div>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    # Rendering text input inside the red box via negative margin or just placing it below?
+    # Streamlit widgets can't be easily nested in HTML divs. 
+    # Workaround: Render the label/box visual, then the input.
+    # User asked for "Use Red Box as reminder".
+    # Let's try to simulate it or just place it "inside" visually.
+    
+    # Better approach for Visuals: 
+    # Use st.markdown to open the div, but we can't close it after the widget easily in standard Streamlit without hacks.
+    # We will use the style provided: "formatted same as address" but with red box.
+    # The simplest "Red Box" is just a styled container.
+    
+    st.markdown('<div style="border: 2px solid #EA4335; border-radius: 6px; padding: 10px; margin-bottom: 16px;">', unsafe_allow_html=True)
+    st.text_input("Email (Required)", placeholder="name@example.com", key="email_input", label_visibility="visible")
+    st.markdown('</div>', unsafe_allow_html=True)
+
     # --- Property Details ---
     st.markdown('<div style="font-size: 14px; font-weight: 500; color: #1A73E8; margin-bottom: 12px;">Property Details</div>', unsafe_allow_html=True)
     
@@ -203,8 +229,18 @@ with c_left:
     
     # --- Factors & Weights ---
     st.markdown('<div class="panel-container">', unsafe_allow_html=True)
+    
+    # Header
+    st.markdown('<div style="font-size: 14px; font-weight: 500; color: #1A73E8; margin-bottom: 12px;">Priorities</div>', unsafe_allow_html=True)
+
+    # Score Method Toggle
+    score_method = st.selectbox("Score Method", ["Default", "Normalized & Weighted"], index=0, key="score_method_input")
+    use_custom_weights = (score_method == "Normalized & Weighted")
+    
+    st.markdown('<div style="margin-top: 12px; margin-bottom: 12px; height: 1px; background-color: #E8EEF5;"></div>', unsafe_allow_html=True)
+    
     st.markdown('<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">'
-                '<div style="font-size: 14px; font-weight: 500; color: #1A73E8;">Priorities</div>'
+                '<div style="font-size: 12px; color: #5F6368;">Factor</div>'
                 '<div style="font-size: 12px; color: #5F6368;">Weight / Lock</div>'
                 '</div>', unsafe_allow_html=True)
     
@@ -227,10 +263,16 @@ with c_left:
         
         with c_slide:
             curr_val = st.session_state.get(f"w_{f}", 20.0)
-            st.markdown(f'<div style="font-size: 13px; font-weight: 500; margin-bottom: -10px;">{f} <span style="font-weight:400; color:#555;">({int(curr_val)}%)</span></div>', unsafe_allow_html=True)
             
-            # Disable slider if locked
+            # Label styling
+            label_color = "#202124" if use_custom_weights else "#9AA0A6"
+            st.markdown(f'<div style="font-size: 13px; font-weight: 500; margin-bottom: -10px; color: {label_color};">{f} <span style="font-weight:400; color:#9AA0A6;">({int(curr_val)}%)</span></div>', unsafe_allow_html=True)
+            
+            # Disable slider if locked OR if using Default method
             is_locked = st.session_state.get(f"lock_{f}", False)
+            slider_disabled = is_locked or (not use_custom_weights)
+            
+            st.slider(
             
             st.slider(
                 f, 
@@ -240,7 +282,7 @@ with c_left:
                 step=1.0,
                 key=f"w_{f}", 
                 label_visibility="collapsed",
-                disabled=is_locked,
+                disabled=slider_disabled,
                 on_change=update_weights,
                 args=(f,)
             )
@@ -258,8 +300,6 @@ with c_left:
     if st.button("Analyze Location", type="primary", use_container_width=True):
          run_analysis_flow()
          
-    # Email & Usage
-    email = st.text_input("Email (Required for Logs)", placeholder="name@example.com", key="email_input")
     # Hidden Model Selection for logic but simplified UI
     st.markdown("<!-- Model: gemini-2.5-flash -->", unsafe_allow_html=True)
     # Actually need to set it for logic
@@ -355,8 +395,11 @@ if st.session_state.processing:
         # 4. LLM Analysis
         model_name = st.session_state.get("input_model", "gemini-2.5-flash")
         
-        # Collect weights
-        user_weights = {f: st.session_state.get(f"w_{f}", 50) for f in factors}
+        
+        # Collect weights ONLY if "Normalized & Weighted" is selected
+        user_weights = None
+        if st.session_state.get("score_method_input") == "Normalized & Weighted":
+            user_weights = {f: st.session_state.get(f"w_{f}", 50) for f in factors}
         
         analysis = llm.analyze_location(address, pois, census, model_name=model_name, weights=user_weights)
         st.session_state.analysis = analysis
