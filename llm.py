@@ -110,7 +110,7 @@ def estimate_census_data(address, model_name='models/gemini-1.5-flash'):
         }
 
 
-def analyze_location(address, poi_data, census_data, model_name='models/gemini-1.5-flash'):
+def analyze_location(address, poi_data, census_data, model_name='models/gemini-1.5-flash', weights=None):
     """
     Analyze the location using Gemini.
     """
@@ -137,8 +137,17 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
         benchmarks = state_data.get_state_benchmarks(detected_state)
         
         # Construct prompt
+        weight_str = "None (Use Defaults)"
+        if weights:
+            weight_str = json.dumps(weights, indent=2)
+
         prompt = f"""
         You are a real estate investment expert. Analyze the following location data for "{address}".
+        
+        USER PRIORITIES (Weights 0-100):
+        The user has defined the following importance for different factors. 
+        HIGH weights mean you must prioritize this factor in your scoring AND highlights/risks.
+        {weight_str}
         
         POI Data (Sample): {str(poi_data)[:2000]}... # Truncate if too long
         Census Data (Target Location): {census_data}
@@ -157,7 +166,7 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
         Please provide an analysis in pure JSON format with the following keys:
         - "highlights": [list of strings describing pros]. Max 4 points. Total word count for this list must be under 80 words.
         - "risks": [list of strings describing cons]. Max 3 points. Total word count for this list must be under 60 words.
-        - "score": (integer 0-100). Use the Benchmarks to help determine if this is a high-income/educated area relative to the state/nation.
+        - "score": (integer 0-100). Use the Benchmarks to help determine if this is a high-income/educated area relative to the state/nation. ADJUST this score based on how well the location meets the USER PRIORITIES.
         - "investment_strategy": (string describing brief strategy). Max 50 words.
         
         Do not use Markdown code blocks. Just valid JSON.

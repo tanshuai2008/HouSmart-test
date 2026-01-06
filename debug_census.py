@@ -2,7 +2,7 @@ import data
 import state_data
 
 def debug_data():
-    address = "350 Fifth Avenue, New York, NY 10118"
+    address = "100 1st Ave, New York, NY 10009"
     print(f"Testing address: {address}")
     
     service = data.CensusDataService()

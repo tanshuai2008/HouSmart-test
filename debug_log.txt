@@ -1,0 +1,12 @@
+Starting Census Fetch for: 350 Fifth Avenue, New York, NY 10118
+Geode Result: {'full_geoid': '360610076001', 'state': '36', 'county': '061', 'tract': '007600', 'block_group': '1'}
+ACS Result Count: 0
+Final Result Keys: None
+Starting Census Fetch for: 350 Fifth Avenue, New York, NY 10118
+Geode Result: {'full_geoid': '360610076001', 'state': '36', 'county': '061', 'tract': '007600', 'block_group': '1'}
+ACS Result Count: 0
+Final Result Keys: None
+Starting Census Fetch for: 100 1st Ave, New York, NY 10009
+Geode Result: {'full_geoid': '360610032002', 'state': '36', 'county': '061', 'tract': '003200', 'block_group': '2'}
+ACS Result Count: 0
+Final Result Keys: None

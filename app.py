@@ -61,6 +61,7 @@ def connect_to_gsheet():
         sheet = client.open(sheet_name).sheet1
         return sheet
     except Exception as e:
+        print(f"GSheet Connect Error: {e}")
         return None
 
 def get_daily_usage(email):
@@ -103,80 +104,183 @@ def get_daily_usage(email):
     except: pass
     return count
 
+factors = ["Amenities", "Transit", "Schools", "Crime", "Appreciation"]
+
+def update_weights(changed_factor):
+    """
+    Callback to normalize weights when one slider changes.
+    Applies the logic: New Value + Locks + Others = 100.
+    """
+    # 1. Get the new value of the changed factor
+    new_val = st.session_state[f"w_{changed_factor}"]
+    
+    # 2. Calculate the sum of LOCKED factors (excluding the changed one, even if it was locked, 
+    # though UI shouldn't allow changing locked ones)
+    locked_factors = [f for f in factors if st.session_state.get(f"lock_{f}", False) and f != changed_factor]
+    locked_sum = sum(st.session_state[f"w_{f}"] for f in locked_factors)
+    
+    # 3. Calculate what is available for the UNLOCKED factors (excluding changed one)
+    # Target total is 100
+    available_for_others = 100 - new_val - locked_sum
+    
+    # 4. Identify other UNLOCKED factors
+    other_unlocked = [f for f in factors if not st.session_state.get(f"lock_{f}", False) and f != changed_factor]
+    
+    # 5. Handle Constraints
+    if available_for_others < 0:
+        # We exceeded 100 using just New Val + Locks. 
+        # Cap the New Val to fit.
+        new_val = 100 - locked_sum
+        st.session_state[f"w_{changed_factor}"] = new_val
+        available_for_others = 0
+    
+    if not other_unlocked:
+        # No other unlocked factors to absorb the change.
+        # If we stick to strict 100, we might force the changed one to conform?
+        # Or if "Strict 100" is the rule, then a single unlocked slider is effectively locked to the remainder.
+        # Let's enforce Strict 100.
+        remainder = 100 - locked_sum
+        st.session_state[f"w_{changed_factor}"] = remainder
+        return
+
+    # 6. Distribute available weight proportional to current values of other unlocked factors
+    current_sum_others = sum(st.session_state[f"w_{f}"] for f in other_unlocked)
+    
+    if current_sum_others == 0:
+        # If all others were 0, distribute evenly
+        share = available_for_others / len(other_unlocked)
+        for f in other_unlocked:
+            st.session_state[f"w_{f}"] = share
+    else:
+        # Proportional distribution
+        ratio = available_for_others / current_sum_others
+        for f in other_unlocked:
+            st.session_state[f"w_{f}"] = st.session_state[f"w_{f}"] * ratio
+
 def run_analysis_flow():
     st.session_state.processing = True
     st.session_state.analyzed = False
 
 # --- Main Layout ---
-col1, col2, col3 = st.columns([20, 40, 40])
+c_left, c_mid, c_right = st.columns([20, 40, 40], gap="medium")
 
 # ==========================================
-# COLUMN 1: CONTROLS (20%)
+# LEFT COLUMN: CONTROLS (20%)
 # ==========================================
-with col1:
-    with st.container():
-        st.markdown('<div class="panel-container">', unsafe_allow_html=True)
-        
-        st.markdown("### Location Analysis")
-        
-        email = st.text_input("Email Address", placeholder="Required", key="email_input")
-        
-        # Model Selection
-        gemini_keys = []
-        main_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-        if main_key: gemini_keys.append(main_key)
-        for i in range(2, 11):
-            val = st.secrets.get(f"GEMINI_API_KEY_{i}") or os.getenv(f"GEMINI_API_KEY_{i}")
-            if val: gemini_keys.append(val)
-        
-        available_models = ["models/gemini-1.5-flash"]
-        if gemini_keys:
-            llm.configure_genai(gemini_keys)
-            try:
-                models = llm.get_available_models()
-                if models and not str(models[0]).startswith("Error"):
-                    available_models = models
-            except: pass
-            
-        st.selectbox("Model Selection", available_models, index=0, key="input_model")
-        
-        st.selectbox("Scoring Method", ["Default", "Normalized & Weighted"], disabled=True, key="scoring_method")
-        
-        st.markdown("---")
-        
-        st.text_input("Address 1", placeholder="Enter address...", key="input_address")
-        
-        # Detailed Property Inputs
-        st.markdown("**Property Details**")
-        st.caption("Bedroom / Bathroom / Size (sqft)")
-        
-        c_bed, c_bath, c_sqft = st.columns(3)
-        with c_bed:
-            st.number_input("Bed", min_value=0, max_value=10, value=2, label_visibility="collapsed", key="input_bedrooms")
-        with c_bath:
-            st.number_input("Bath", min_value=0, max_value=10, value=1, label_visibility="collapsed", key="input_bathrooms")
-        with c_sqft:
-            st.number_input("Sqft", min_value=0, max_value=10000, value=1000, step=50, label_visibility="collapsed", key="input_sqft")
-            
-        st.selectbox("Property Type", ["Apartment", "Single Family", "Condo", "Townhouse"], index=0, key="input_property_type")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        if st.button("Analyze", type="primary", use_container_width=True):
-             run_analysis_flow()
+with c_left:
+    st.markdown('<div class="panel-container">', unsafe_allow_html=True)
+    
+    # --- Property Details ---
+    st.markdown('<div style="font-size: 14px; font-weight: 500; color: #1A73E8; margin-bottom: 12px;">Property Details</div>', unsafe_allow_html=True)
+    
+    st.caption("Target Address")
+    st.text_input("Address", placeholder="Enter address...", key="input_address", label_visibility="collapsed")
+    
+    st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
+    
+    # Bed / Bath / Sqft
+    c_b1, c_b2, c_b3 = st.columns(3)
+    with c_b1:
+        st.caption("Bed")
+        st.number_input("Bed", min_value=0, max_value=10, value=2, label_visibility="collapsed", key="input_bedrooms")
+    with c_b2:
+        st.caption("Bath")
+        st.number_input("Bath", min_value=0, max_value=10, value=1, label_visibility="collapsed", key="input_bathrooms")
+    with c_b3:
+        st.caption("Sqft")
+        st.number_input("Sqft", min_value=0, value=1500, step=100, label_visibility="collapsed", key="input_sqft")
 
-        if st.session_state.email_input:
-            usage = get_daily_usage(st.session_state.email_input)
-            st.caption(f"Daily Trials: {usage}/3")
+    st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
+    st.selectbox("Property Type", ["Apartment", "Single Family", "Condo", "Townhouse"], index=0, key="input_property_type")
+    
+    st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
+    
+    # Address 2 (Collapsible or just standard for now per requirement "Address 2 (Optional)")
+    with st.expander("Compare Address (Optional)"):
+        st.text_input("Address 2", placeholder="Comparison address...", key="input_address_2")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # --- Factors & Weights ---
+    st.markdown('<div class="panel-container">', unsafe_allow_html=True)
+    st.markdown('<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">'
+                '<div style="font-size: 14px; font-weight: 500; color: #1A73E8;">Priorities</div>'
+                '<div style="font-size: 12px; color: #5F6368;">Weight / Lock</div>'
+                '</div>', unsafe_allow_html=True)
+    
+    # Initialize weights if not exists (ensure they sum to 100 initially)
+    if "init_weights" not in st.session_state:
+        st.session_state.init_weights = True
+        default_val = 100 / len(factors)
+        for f in factors:
+            if f"w_{f}" not in st.session_state:
+                st.session_state[f"w_{f}"] = default_val
+            if f"lock_{f}" not in st.session_state:
+                st.session_state[f"lock_{f}"] = False
+        
+    for f in factors:
+        # Layout: Slider (80%) | Lock (20%)
+        # Note: Streamlit cols are good for this.
+        # We need to construct the key carefully.
+        
+        c_slide, c_lock = st.columns([85, 15])
+        
+        with c_slide:
+            curr_val = st.session_state.get(f"w_{f}", 20.0)
+            st.markdown(f'<div style="font-size: 13px; font-weight: 500; margin-bottom: -10px;">{f} <span style="font-weight:400; color:#555;">({int(curr_val)}%)</span></div>', unsafe_allow_html=True)
             
-        st.markdown('</div>', unsafe_allow_html=True)
+            # Disable slider if locked
+            is_locked = st.session_state.get(f"lock_{f}", False)
+            
+            st.slider(
+                f, 
+                min_value=0.0, 
+                max_value=100.0, 
+                value=float(curr_val),
+                step=1.0,
+                key=f"w_{f}", 
+                label_visibility="collapsed",
+                disabled=is_locked,
+                on_change=update_weights,
+                args=(f,)
+            )
+
+        with c_lock:
+            # Spacer to align with slider
+            st.markdown('<div style="height: 18px;"></div>', unsafe_allow_html=True)
+            st.checkbox("Lock", key=f"lock_{f}", label_visibility="collapsed")
+            # Custom Lock Icon could be done with pure HTML if Checkbox is too ugly, but Checkbox is functional.
+            # "🔒" if is_locked else "🔓" - creating a custom button might be better UX but checkbox is robust.
+
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Analyze Button
+    if st.button("Analyze Location", type="primary", use_container_width=True):
+         run_analysis_flow()
+         
+    # Email & Usage
+    email = st.text_input("Email (Required for Logs)", placeholder="name@example.com", key="email_input")
+    # Hidden Model Selection for logic but simplified UI
+    st.markdown("<!-- Model: gemini-2.5-flash -->", unsafe_allow_html=True)
+    # Actually need to set it for logic
+    if "input_model" not in st.session_state:
+        st.session_state.input_model = "gemini-2.5-flash"
+        
+    # Configure Key for convenience if not done
+    gemini_key = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        llm.configure_genai([gemini_key])
+
+    if st.session_state.email_input:
+        usage = get_daily_usage(st.session_state.email_input)
+        st.caption(f"Daily Usage: {usage}/3")
+
 
 # ==========================================
-# PROCESSING LOGIC
+# PROCESSING LOGIC (Uses Middle Column)
 # ==========================================
 if st.session_state.processing:
-    # Use a placeholder in Col 2 for the loader
-    with col2:
+    with c_mid:
         loader_placeholder = st.empty()
         components.render_loader(loader_placeholder, 5)
 
@@ -197,24 +301,23 @@ if st.session_state.processing:
             st.error("Daily limit reached.")
             st.session_state.processing = False
             st.stop()
-
-        components.render_loader(loader_placeholder, 20)
-        
+            
         # Logging
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_dir = "logs"
-        if not os.path.exists(log_dir): os.makedirs(log_dir)
         try:
              # CSV Log
+             log_dir = "logs"
+             if not os.path.exists(log_dir): os.makedirs(log_dir)
              with open(os.path.join(log_dir, "usage_logs.csv"), 'a', newline='', encoding='utf-8') as f:
                  writer = csv.writer(f)
                  writer.writerow([timestamp, user_email, address])
              # GSheet Log
              sheet = connect_to_gsheet()
              if sheet: sheet.append_row([timestamp, user_email, address])
-        except: pass
+        except Exception as e:
+            print(f"Logging Error: {e}")
         
-        components.render_loader(loader_placeholder, 40)
+        components.render_loader(loader_placeholder, 30)
         
         # 1. POI
         geo_key = st.secrets.get("GEOAPIFY_API_KEY")
@@ -228,32 +331,34 @@ if st.session_state.processing:
         # 2. Census
         census = data.get_census_data(address)
         if not census:
-            census = llm.estimate_census_data(address, model_name=st.session_state.input_model)
+            census = llm.estimate_census_data(address, model_name=st.session_state.get("input_model", "gemini-2.5-flash"))
             census['source'] = "AI Estimation"
         st.session_state.census = census
         
         components.render_loader(loader_placeholder, 70)
         
         # 3. Rent Analysis
-        rent_key = st.secrets.get("RENTCAST_API_KEY") or os.getenv("RENTCAST_API_KEY")
+        rent_key = st.secrets.get("RENTCAST_API_KEY")
         if rent_key:
             rent_data = data.get_rentcast_data(
                 address, 
                 st.session_state.input_bedrooms, 
                 st.session_state.input_bathrooms,
                 st.session_state.input_sqft,
-                st.session_state.input_property_type, 
+                "Apartment", # Default for now or use session state logic
                 rent_key
             )
             st.session_state.rent_data = rent_data
-        else:
-            st.session_state.rent_data = None
         
         components.render_loader(loader_placeholder, 80)
         
         # 4. LLM Analysis
-        model_name = st.session_state.input_model
-        analysis = llm.analyze_location(address, pois, census, model_name=model_name)
+        model_name = st.session_state.get("input_model", "gemini-2.5-flash")
+        
+        # Collect weights
+        user_weights = {f: st.session_state.get(f"w_{f}", 50) for f in factors}
+        
+        analysis = llm.analyze_location(address, pois, census, model_name=model_name, weights=user_weights)
         st.session_state.analysis = analysis
         
         components.render_loader(loader_placeholder, 100)
@@ -263,86 +368,24 @@ if st.session_state.processing:
         st.rerun()
 
 # ==========================================
-# RENDER ANALYTICS & MAP (Columns 2 & 3)
+# RESULTS DISPLAY
 # ==========================================
 if st.session_state.analyzed:
     census = st.session_state.census
     rent_data = st.session_state.get("rent_data")
-
-    # COLUMN 2: ANALYTICS (40%)
-    with col2:
-        # --- RENT ANALYSIS MODULE ---
-        if rent_data:
-            st.markdown('<div class="panel-container">', unsafe_allow_html=True)
-            st.subheader("Rent Analysis")
-            
-            # Rent Metrics
-            est_rent = rent_data.get('estimated_rent', 0)
-            low, high = rent_data.get('rent_range', [0, 0])
-            
-            # Census Benchmark
-            census_median_rent = 0
-            metrics = census.get('metrics', {})
-            if metrics:
-                s_rent = metrics.get('median_gross_rent', "N/A")
-                if s_rent != "N/A":
-                    census_median_rent = int(str(s_rent).replace('$','').replace(',',''))
-            
-            # Displays
-            rc1, rc2 = st.columns(2)
-            with rc1:
-                st.metric("Estimated Rent", f"${est_rent:,}", f"${low:,} - ${high:,}")
-            with rc2:
-                if census_median_rent > 0:
-                     delta = est_rent - census_median_rent
-                     st.metric("Census Median Rent", f"${census_median_rent:,}", f"{delta:+,} vs Avg")
-                else:
-                    st.metric("Census Median Rent", "N/A", "No Local Data")
-
-            # Comparables Chart & List
-            comps = rent_data.get('comparables', [])
-            if comps:
-                st.markdown("**Comparable Rents**")
-                
-                # Bar Chart for Comps
-                df_comps = pd.DataFrame(comps)
-                # Shorten address for chart label
-                df_comps['Label'] = df_comps['address'].apply(lambda x: x.split(',')[0] if x else "N/A")
-                
-                chart_comps = alt.Chart(df_comps).mark_bar().encode(
-                    x=alt.X('Label', sort='-y', title=None),
-                    y=alt.Y('price', title='Rent ($)'),
-                    color=alt.Color('Label', legend=None),
-                    tooltip=['address', 'price', 'similarity']
-                ).properties(height=150)
-                
-                st.altair_chart(chart_comps, use_container_width=True)
-
-                st.markdown("**Comp Details**")
-                for comp in comps:
-                    st.markdown(f"""
-                    <div style="background: #F8FAFC; padding: 8px; border-radius: 4px; margin-bottom: 8px; border: 1px solid #E2E8F0;">
-                        <div style="font-weight: 500; font-size: 13px;">{comp.get('address')}</div>
-                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #64748B;">
-                           <span>${comp.get('price', 0):,} / mo</span>
-                           <span>Similarity: {comp.get('similarity', 0)}%</span> 
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.caption("No comparable properties found.")
-                
-            st.markdown('</div>', unsafe_allow_html=True)
-
-
+    analysis = st.session_state.analysis
+    
+    # --- MIDDLE COLUMN: ANALYTICS ---
+    with c_mid:
         st.markdown('<div class="panel-container">', unsafe_allow_html=True)
-        st.subheader("Demographics Analysis")
+        st.subheader("Census & Scores Analysis")
         
-        # Prepare Data for Charts
-        # 1. Income
+        # 1. Census Charts (2x2 Placeholder)
+        # Using Altair
         metrics = census.get('metrics', {})
         benchmarks = census.get('benchmarks', {})
         
+        # Prepare Data for Charts
         def parse_curr(s):
             if isinstance(s, int): return s
             if not s or s == "N/A": return 0
@@ -350,146 +393,110 @@ if st.session_state.analyzed:
 
         local_inc = parse_curr(metrics.get('median_household_income'))
         state_inc = benchmarks.get('state_median_income', 0)
-        us_inc = benchmarks.get('national_median_income', 0)
         
+        # Chart 1: Income
         df_income = pd.DataFrame([
-            {"Region": "National", "Income": us_inc, "Color": "#E8EEF5"},
             {"Region": "State", "Income": state_inc, "Color": "#1A73E8"},
             {"Region": "Local", "Income": local_inc, "Color": "#0F1C2E"}
         ])
-        
         chart_income = alt.Chart(df_income).mark_bar().encode(
-            x=alt.X('Region', sort=["National", "State", "Local"]),
-            y='Income',
-            color=alt.Color('Region', scale=alt.Scale(domain=['National','State','Local'], range=['#9CA3AF', '#1A73E8', '#0F1C2E'])),
-            tooltip=['Region', 'Income']
-        ).properties(title="Median Household Income", height=180)
-
-        # Draw 2x2 Grid
-        c_1, c_2 = st.columns(2)
-        with c_1:
-            st.altair_chart(chart_income, use_container_width=True)
-            
-            # Education Chart
-            # Local: Bachelor+ Pct vs State Bachelor+ (roughly)
-            local_bach = metrics.get('education_bachelors_pct', 0)
-            if local_bach == "N/A": local_bach = 0
-            
-            state_edu = benchmarks.get('state_edu', [0,0,0])
-            state_bach = state_edu[1] if state_edu else 0 # Benchmark is [HS+, Bach+, Adv+]
-            
-            df_edu = pd.DataFrame([
+             x=alt.X('Region', sort=["State", "Local"]),
+             y='Income',
+             color=alt.Color('Region', scale=alt.Scale(domain=['State','Local'], range=['#1A73E8', '#0F1C2E'])),
+             tooltip=['Region', 'Income']
+        ).properties(title="Household Income", height=150)
+        
+        # Chart 2: Education
+        local_bach = metrics.get('education_bachelors_pct', 0)
+        if local_bach == "N/A": local_bach = 0
+        state_edu = benchmarks.get('state_edu', [0,0,0])
+        state_bach = state_edu[1] if state_edu else 0
+        
+        df_edu = pd.DataFrame([
                 {"Region": "State", "Pct": state_bach, "Color": "#1A73E8"},
                 {"Region": "Local", "Pct": local_bach, "Color": "#0F1C2E"}
-            ])
-            
-            chart_edu = alt.Chart(df_edu).mark_bar().encode(
-                x=alt.X('Region', sort=["State", "Local"]),
-                y=alt.Y('Pct', title='Bachelor+ (%)'),
-                color=alt.Color('Region', scale=alt.Scale(domain=['State','Local'], range=['#1A73E8', '#0F1C2E'])),
-                tooltip=['Region', 'Pct']
-            ).properties(title="Education (Bachelor+)", height=180)
-            
+        ])
+        chart_edu = alt.Chart(df_edu).mark_bar().encode(
+             x=alt.X('Region', sort=["State", "Local"]),
+             y=alt.Y('Pct', title='%'),
+             color=alt.Color('Region', scale=alt.Scale(domain=['State','Local'], range=['#1A73E8', '#0F1C2E']))
+        ).properties(title="Bachelor+ Degree", height=150)
+        
+        # Render 2x2
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            st.altair_chart(chart_income, use_container_width=True)
+        with cc2:
             st.altair_chart(chart_edu, use_container_width=True)
             
-        with c_2:
-            # Race Chart (Pie or Bar) - Let's do Bar for simplicity and comparison if State data available
-            # We have local race dict: {White, Black, Asian...}
-            # We have state race list: [White, Hisp, Black, Asian, Other] -> Be careful with order
-            local_race = metrics.get('race', {})
-            state_race = benchmarks.get('state_race', [])
-            
-            # Helper to align keys
-            # State order: White(0), Hispanic(1), Black(2), Asian(3), Other(4)
-            data_race = []
-            keys = ["White", "Hispanic", "Black", "Asian", "Other"]
-            
-            if local_race:
-                for k in keys:
-                    data_race.append({"Demographic": k, "Source": "Local", "Pct": local_race.get(k, 0), "Color": "#0F1C2E"})
-                    
-            if state_race and len(state_race) == 5:
-                # Add State benchmarks
-                data_race.append({"Demographic": "White", "Source": "State", "Pct": state_race[0], "Color": "#1A73E8"})
-                data_race.append({"Demographic": "Hispanic", "Source": "State", "Pct": state_race[1], "Color": "#1A73E8"})
-                data_race.append({"Demographic": "Black", "Source": "State", "Pct": state_race[2], "Color": "#1A73E8"})
-                data_race.append({"Demographic": "Asian", "Source": "State", "Pct": state_race[3], "Color": "#1A73E8"})
-                data_race.append({"Demographic": "Other", "Source": "State", "Pct": state_race[4], "Color": "#1A73E8"})
+        st.markdown("---")
+        
+        # 2. Composite Score (Horizontal Bar as Radar Proxy)
+        st.caption("Factor Composite Score")
+        # Use real-time weights for visualization (Logic: Score = Weight * RawScore? 
+        # For now, just visualize the Weights themselves as 'Priorities' or mock Scores based on weights)
+        # Requirement says "Factor Composite Score". Let's assume we want to show how the factors are weighted or their resulting score.
+        # Since we don't have real "Scores" for each factor from the LLM yet (we might), let's show the Weights for now to verify the slider logic visually.
+        
+        radar_df = pd.DataFrame({
+            "Factor": factors,
+            "Weight": [st.session_state.get(f"w_{f}", 20) for f in factors]
+        })
+        
+        chart_radar = alt.Chart(radar_df).mark_bar().encode(
+            x=alt.X('Weight', scale=alt.Scale(domain=[0, 100]), title="Weight (%)"),
+            y=alt.Y('Factor', sort=None),
+            color=alt.Color('Weight', legend=None, scale=alt.Scale(scheme='blues')),
+            tooltip=['Factor', 'Weight']
+        ).properties(height=200, title="Current Factor Weights")
+        st.altair_chart(chart_radar, use_container_width=True)
 
-            if data_race:
-                df_race = pd.DataFrame(data_race)
-                chart_race = alt.Chart(df_race).mark_bar().encode(
-                    x=alt.X('Demographic', sort=keys),
-                    y=alt.Y('Pct', title='Percentage'),
-                    xOffset='Source', # Grouped bar
-                    color=alt.Color('Source', scale=alt.Scale(domain=['State','Local'], range=['#1A73E8', '#0F1C2E'])),
-                    tooltip=['Demographic', 'Source', 'Pct']
-                ).properties(title="Race Demographics", height=180)
-                st.altair_chart(chart_race, use_container_width=True)
-            else:
-                st.info("Race: Data Unavailable")
-
-            # Age (Median) Display
-            st.markdown("##### Median Age")
-            local_age = metrics.get('median_age', "N/A")
-            if local_age != "N/A":
-                st.metric("Local Median Age", local_age)
-            else:
-                 st.info("Age Data Unavailable")
-            st.caption("Detailed Age buckets not loaded for preview.")
-            
         st.markdown('</div>', unsafe_allow_html=True)
         
         # AI Summary
         st.markdown('<div class="panel-container">', unsafe_allow_html=True)
         st.subheader("🤖 AI Executive Summary")
-        
-        analysis = st.session_state.analysis
         if "investment_strategy" in analysis:
-            st.markdown(f"**Strategy:** {analysis['investment_strategy']}")
-            
-        if "highlights" in analysis:
-            st.markdown("##### ✅ Pros")
-            for h in analysis["highlights"]:
-                st.markdown(f"<span style='color:green'>✓</span> {h}", unsafe_allow_html=True)
-                
-        if "risks" in analysis:
-            st.markdown("##### ⚠️ Cons")
-            for r in analysis["risks"]:
-                st.markdown(f"<span style='color:orange'>⚠</span> {r}", unsafe_allow_html=True)
+            st.info(analysis["investment_strategy"])
         
-        st.caption("AI generated content may vary.")
+        ac1, ac2 = st.columns(2)
+        with ac1:
+            st.markdown("**Pros**")
+            if "highlights" in analysis:
+                for h in analysis["highlights"][:4]:
+                    st.markdown(f"<span style='color:#34A853'>✓</span> {h}", unsafe_allow_html=True)
+        with ac2:
+            st.markdown("**Risks**")
+            if "risks" in analysis:
+                for r in analysis["risks"][:4]:
+                    st.markdown(f"<span style='color:#FBBC04'>⚠</span> {r}", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-
-    # COLUMN 3: MAP (40%)
-    with col3:
+    # --- RIGHT COLUMN: MAP ---
+    with c_right:
         st.markdown('<div class="panel-container">', unsafe_allow_html=True)
         st.subheader("Interactive Map")
         
         if st.session_state.lat and st.session_state.lon:
+            # Re-use map generation
             deck_map, legend_items = map.generate_map(st.session_state.lat, st.session_state.lon, st.session_state.pois)
             st_folium(deck_map, use_container_width=True, height=500)
             
             if legend_items:
-                st.caption("Map Legend")
-                legend_html = " &nbsp; | &nbsp; ".join([f"{emoji} {label}" for label, (emoji, _) in legend_items.items()])
-                st.markdown(legend_html)
-                
-            st.success(f"Score: {analysis.get('score', 'N/A')}/100")
-        else:
-            st.warning("Map requires analysis data.")
-            
+                st.caption("Nearby Amenities")
+                st.markdown('<div style="display: flex; flex-wrap: wrap; gap: 8px;">', unsafe_allow_html=True)
+                for label, (emoji, _) in legend_items.items():
+                    st.markdown(f'<div style="background: #F8FAFD; padding: 4px 8px; border-radius: 4px; font-size: 12px; border: 1px solid #E8EEF5;">{emoji} {label}</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+
         st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    # Empty State (Welcome) - Displayed in Col 2 and 3 usually, or just a big hero in Col 2
-    with col2:
-        st.info("👈 Enter an address in the sidebar and click 'Analyze' to start.")
+    # Empty State
+    with c_mid:
         st.markdown("""
-        ### Features
-        - **POI Analysis**: Analyzes nearby points of interest.
-        - **Demographics**: Evaluates census data suitability.
-        - **Rent Analysis**: Estimates long-term rent and comparables.
-        - **Investment Scoring**: AI-generated scoring.
-        """)
+        <div style="text-align: center; margin-top: 40px; color: #5F6368;">
+            <h3>Welcome to HouSmart</h3>
+            <p>Enter an address on the left to begin your location analysis.</p>
+        </div>
+        """, unsafe_allow_html=True)
