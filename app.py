@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 import csv
 import os
 import time
+import gspread
+from google.oauth2.service_account import Credentials
 
 # Page Configuration
 st.set_page_config(layout="wide", page_title="HouSmart Dashboard", page_icon="🏠")
@@ -22,6 +24,24 @@ def start_processing():
 
 def finish_processing():
     st.session_state.processing = False
+
+def connect_to_gsheet():
+    try:
+        if "gcp_service_account" not in st.secrets:
+            return None
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        client = gspread.authorize(creds)
+        sheet_name = st.secrets.get("GSHEET_NAME", "HouSmart_Logs")
+        try:
+            sheet = client.open(sheet_name).sheet1
+            return sheet
+        except gspread.exceptions.SpreadsheetNotFound:
+            # Create if not exists (optional, or just return None/Error)
+            return None
+    except Exception as e:
+        print(f"GSheet Connect Error: {e}")
+        return None
 
 # Helper: Get Daily Usage
 def get_daily_usage(email):
@@ -190,7 +210,7 @@ with col1:
     # Card B: Property Details
     with st.container(border=True):
         st.markdown("### Property Details")
-        st.text_input("Address", "123 Market St, San Francisco, CA")
+        st.text_input("Address", "123 Market St, San Francisco, CA", key="address_input")
         
         # Adjusted columns to give Sqft more space (5 digits)
         # Using [1, 1, 3] to give even more room to the last column
@@ -217,6 +237,42 @@ if st.session_state.processing:
     with col2:
         with st.spinner("Analyzing property... (Simulated)"):
             time.sleep(2.5) # Simulate Loading
+            
+            # --- LOGGING ---
+            try:
+                sheet = connect_to_gsheet()
+                if sheet:
+                    # Check/Add Headers
+                    headers = ["Timestamp", "Email", "Address", "PromptTokens", "CompletionTokens", "TotalTokens", "EstimatedRPM"]
+                    first_row = sheet.row_values(1)
+                    if not first_row:
+                        sheet.append_row(headers)
+                    elif first_row != headers:
+                         # Optional: Update headers if strictly required, but safer to append or ignore
+                         pass
+                    
+                    # Log Data
+                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    email = st.session_state.get("user_email_input", "unknown")
+                    # Address is just text input, default "123 Market St..." if not changed
+                    # But notice the address input doesn't have a key in my previous view_file of app.py?
+                    # Let's check session state keys used.
+                    # line 193: st.text_input("Address", "123 Market St, San Francisco, CA") -> no key, so it returns the value but doesn't store in distinct session_state key unless assigned.
+                    # Wait, st.text_input returns value. We need to capture it.
+                    # Since this block is 'if processing', and processing is set by button click... 
+                    # we do not have easy access to the widget return value HERE unless it's in a key.
+                    # I should update the Address input to have a key.
+                    
+                    # For now, I'll assume "user_address_input" key if I added it, if not I will access state or placeholder.
+                    # Let's use st.session_state.get("address_input", "Unknown Address")
+                    # Warning: Need to ensure Address input HAS this key.
+                    addr = st.session_state.get("address_input", "123 Market St, San Francisco, CA")
+                    
+                    sheet.append_row([ts, email, addr, 0, 0, 0, 1])
+                    
+            except Exception as e:
+                print(f"Logging Error: {e}")
+                
         st.session_state.processing = False
         st.rerun() # Re-enable button
 
@@ -237,7 +293,8 @@ with col2:
             "Value": [15, 12, 14, 45, 40, 38, 40, 48, 48]
         })
         fig_inc = px.bar(df_income, x="Range", y="Value", color="Scope", barmode="group", title="Income", height=250,
-                        color_discrete_map={"Local": "#1A73E8", "State": "#9AA0A6", "National": "#DADCE0"})
+                        color_discrete_map={"Local": "#1A73E8", "State": "#9AA0A6", "National": "#DADCE0"},
+                        labels={"Value": "%"})
         fig_inc.update_layout(margin=dict(l=0,r=0,t=30,b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 
         # 2. Age Distribution
@@ -247,7 +304,8 @@ with col2:
             "Value": [20, 22, 21, 40, 35, 30, 25, 28, 29, 15, 15, 20]
         })
         fig_age = px.bar(df_age, x="Range", y="Value", color="Scope", barmode="group", title="Age", height=250,
-                        color_discrete_map={"Local": "#34A853", "State": "#9AA0A6", "National": "#DADCE0"})
+                        color_discrete_map={"Local": "#34A853", "State": "#9AA0A6", "National": "#DADCE0"},
+                        labels={"Value": "%"})
         fig_age.update_layout(margin=dict(l=0,r=0,t=30,b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 
         # 3. Race Distribution
@@ -257,7 +315,8 @@ with col2:
             "Value": [35, 15, 6, 30, 40, 60, 20, 30, 18, 15, 15, 16]
         })
         fig_race = px.bar(df_race, x="Group", y="Value", color="Scope", barmode="group", title="Race", height=250,
-                        color_discrete_map={"Local": "#FBBC04", "State": "#9AA0A6", "National": "#DADCE0"})
+                        color_discrete_map={"Local": "#FBBC04", "State": "#9AA0A6", "National": "#DADCE0"},
+                        labels={"Value": "%"})
         fig_race.update_layout(margin=dict(l=0,r=0,t=30,b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 
         # 4. Education
@@ -267,7 +326,8 @@ with col2:
             "Value": [10, 20, 25, 50, 45, 40, 40, 35, 35]
         })
         fig_edu = px.bar(df_edu, x="Level", y="Value", color="Scope", barmode="group", title="Education", height=250,
-                        color_discrete_map={"Local": "#EA4335", "State": "#9AA0A6", "National": "#DADCE0"})
+                        color_discrete_map={"Local": "#EA4335", "State": "#9AA0A6", "National": "#DADCE0"},
+                        labels={"Value": "%"})
         fig_edu.update_layout(margin=dict(l=0,r=0,t=30,b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 
         # 2x2 Grid
