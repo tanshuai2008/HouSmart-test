@@ -44,7 +44,22 @@ if "processing" not in st.session_state:
     st.session_state.processing = False
 
 # Inject CSS
+# Inject CSS
 st.markdown(components.get_base_css(), unsafe_allow_html=True)
+# Inject Blue Slider Override
+st.markdown("""
+<style>
+div[data-baseweb="slider"] div[class*="StyledThumb"] {
+    background-color: #1A73E8 !important;
+}
+div[data-baseweb="slider"] div[class*="StyledTrack"] {
+    background-color: #1A73E8 !important;
+}
+div[data-baseweb="slider"] div[class*="StyledTickBar"] {
+    background-color: #1A73E8 !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Render Header
 components.render_header()
@@ -170,17 +185,12 @@ c_left, c_mid, c_right = st.columns([20, 40, 40], gap="medium")
 with c_left:
     st.markdown('<div class="panel-container">', unsafe_allow_html=True)
     
-    st.markdown('<div class="panel-container">', unsafe_allow_html=True)
-    
     # --- Email Input (Required) ---
-    st.markdown(
-        """
-        <div style="border: 2px solid #EA4335; padding: 12px; border-radius: 6px; margin-bottom: 20px; background-color: #FEF7F6;">
-            <div style="color: #EA4335; font-size: 12px; font-weight: 600; margin-bottom: 4px;">REQUIRED</div>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+    # Conditional Red Border
+    border_color = "#EA4335" if not st.session_state.get("email_input") else "#dfe1e5"
+    st.markdown(f'<div style="border: 2px solid {border_color}; border-radius: 6px; padding: 10px; margin-bottom: 16px;">', unsafe_allow_html=True)
+    st.text_input("Email (Required)", placeholder="name@example.com", key="email_input", label_visibility="visible")
+    st.markdown('</div>', unsafe_allow_html=True)
     # Rendering text input inside the red box via negative margin or just placing it below?
     # Streamlit widgets can't be easily nested in HTML divs. 
     # Workaround: Render the label/box visual, then the input.
@@ -192,9 +202,7 @@ with c_left:
     # We will use the style provided: "formatted same as address" but with red box.
     # The simplest "Red Box" is just a styled container.
     
-    st.markdown('<div style="border: 2px solid #EA4335; border-radius: 6px; padding: 10px; margin-bottom: 16px;">', unsafe_allow_html=True)
-    st.text_input("Email (Required)", placeholder="name@example.com", key="email_input", label_visibility="visible")
-    st.markdown('</div>', unsafe_allow_html=True)
+
 
     # --- Property Details ---
     st.markdown('<div style="font-size: 14px; font-weight: 500; color: #1A73E8; margin-bottom: 12px;">Property Details</div>', unsafe_allow_html=True)
@@ -221,9 +229,7 @@ with c_left:
     
     st.markdown('<div style="height: 12px;"></div>', unsafe_allow_html=True)
     
-    # Address 2 (Collapsible or just standard for now per requirement "Address 2 (Optional)")
-    with st.expander("Compare Address (Optional)"):
-        st.text_input("Address 2", placeholder="Comparison address...", key="input_address_2")
+
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -234,8 +240,9 @@ with c_left:
     st.markdown('<div style="font-size: 14px; font-weight: 500; color: #1A73E8; margin-bottom: 12px;">Priorities</div>', unsafe_allow_html=True)
 
     # Score Method Toggle
-    score_method = st.selectbox("Score Method", ["Default", "Normalized & Weighted"], index=0, key="score_method_input")
-    use_custom_weights = (score_method == "Normalized & Weighted")
+    # Score Method: Default (Hidden/Fixed)
+    score_method = "Default"
+    use_custom_weights = False # Always False per request "cannot check weight/lock"
     
     st.markdown('<div style="margin-top: 12px; margin-bottom: 12px; height: 1px; background-color: #E8EEF5;"></div>', unsafe_allow_html=True)
     
@@ -265,8 +272,10 @@ with c_left:
             curr_val = st.session_state.get(f"w_{f}", 20.0)
             
             # Label styling
+            # Label styling
             label_color = "#202124" if use_custom_weights else "#9AA0A6"
-            st.markdown(f'<div style="font-size: 13px; font-weight: 500; margin-bottom: -10px; color: {label_color};">{f} <span style="font-weight:400; color:#9AA0A6;">({int(curr_val)}%)</span></div>', unsafe_allow_html=True)
+            # Removed percentage text as requested
+            st.markdown(f'<div style="font-size: 13px; font-weight: 500; margin-bottom: -10px; color: {label_color};">{f}</div>', unsafe_allow_html=True)
             
             # Disable slider if locked OR if using Default method
             is_locked = st.session_state.get(f"lock_{f}", False)
