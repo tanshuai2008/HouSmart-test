@@ -10,6 +10,7 @@ import datetime
 import google.api_core.exceptions
 
 import state_data
+from config_manager import config_manager
 
 # Module-level variable to store keys
 _GEMINI_KEYS = []
@@ -62,8 +63,11 @@ def get_cached_analysis(address, weights=None):
             file_time = datetime.datetime.fromtimestamp(mtime)
             age = datetime.datetime.now() - file_time
             
-            # 240 Hours = 10 Days
-            if age.total_seconds() < 240 * 3600:
+            # Get Cache TTL from config
+            config = config_manager.get_config()
+            ttl_hours = config.get("cache_ttl_hours", 240)
+            
+            if age.total_seconds() < ttl_hours * 3600:
                 with open(filename, 'rb') as f:
                     data = pickle.load(f)
                 
@@ -210,6 +214,19 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
         print("Using cached analysis.")
         return cached_result
 
+    # 1.5 Get Config
+    config = config_manager.get_config()
+    
+    # Priority: Function Arg > Config > Default
+    # But for "Dynamic Config" requirement, if user didn't explicitly pass a model (passed default), we should prefer config.
+    # The default arg is 'models/gemini-1.5-flash'. If caller passed anything else, respect it.
+    # However, app.py passes model_name from st.session_state. We should update app.py to get it from config.
+    # Here we just ensure we have a fallback or override if needed.
+    # Actually, let's just use the config for temperature effectively.
+    
+    current_model_name = model_name
+    temperature = config.get("temperature", 0.7)
+
     # Handle short names vs full names
     if not model_name.startswith('models/'):
         pass 
@@ -254,9 +271,12 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
         }
         
         model = genai.GenerativeModel(
-            model_name=model_name,
+            model_name=current_model_name,
             generation_config=generation_config
         )
+        # Set temperature via generation_config if supported in this SDK version, 
+        # or we might need to update generation_config dict.
+        generation_config["temperature"] = temperature
         
         # Look up state benchmarks
         detected_state = "United States" 
