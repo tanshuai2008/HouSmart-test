@@ -273,8 +273,6 @@ with c_left:
             slider_disabled = is_locked or (not use_custom_weights)
             
             st.slider(
-            
-            st.slider(
                 f, 
                 min_value=0.0, 
                 max_value=100.0, 
