@@ -368,12 +368,10 @@ if st.session_state.processing:
         
         components.render_loader(loader_placeholder, 50)
 
-        # 2. Census
+        # 2. Census (Try Real Data first)
         census = data.get_census_data(address)
-        if not census:
-            census = llm.estimate_census_data(address, model_name=st.session_state.get("input_model", "gemini-2.5-flash"))
-            census['source'] = "AI Estimation"
-        st.session_state.census = census
+        # We DO NOT call estimate_census_data here to save API calls.
+        # It will be handled in analyze_location.
         
         components.render_loader(loader_placeholder, 70)
         
@@ -385,14 +383,14 @@ if st.session_state.processing:
                 st.session_state.input_bedrooms, 
                 st.session_state.input_bathrooms,
                 st.session_state.input_sqft,
-                "Apartment", # Default for now or use session state logic
+                "Apartment", 
                 rent_key
             )
             st.session_state.rent_data = rent_data
         
         components.render_loader(loader_placeholder, 80)
         
-        # 4. LLM Analysis
+        # 4. LLM Analysis (Integrated Analysis + Estimation)
         model_name = st.session_state.get("input_model", "gemini-2.5-flash")
         
         
@@ -403,6 +401,19 @@ if st.session_state.processing:
         
         analysis = llm.analyze_location(address, pois, census, model_name=model_name, weights=user_weights)
         st.session_state.analysis = analysis
+        
+        # 5. Backfill Census if missing (using LLM estimate)
+        if not census or not census.get('metrics'):
+             estimated = analysis.get('estimated_census', {})
+             # Ensure structure matches what charts expect
+             if 'metrics' not in estimated:
+                 # Flattened or wrong structure? Schema should enforce it, but safety first
+                 census = {'metrics': estimated, 'source': 'AI (Estimated)'}
+             else:
+                 census = estimated
+                 census['source'] = 'AI (Estimated)'
+        
+        st.session_state.census = census
         
         components.render_loader(loader_placeholder, 100)
         
@@ -422,6 +433,11 @@ if st.session_state.analyzed:
     with c_mid:
         st.markdown('<div class="panel-container">', unsafe_allow_html=True)
         st.subheader("Census & Scores Analysis")
+        
+        # Cache Indicator
+        if analysis.get('_cache_meta'):
+            ts = analysis['_cache_meta'].get('timestamp', 'Unknown Date')
+            st.caption(f"⚡ Using cached analysis from {ts} (Valid 240hrs)")
         
         # 1. Census Charts (2x2 Placeholder)
         # Using Altair
