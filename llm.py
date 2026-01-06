@@ -3,6 +3,9 @@ import os
 import json
 import time
 import random
+import hashlib
+import pickle
+import datetime
 
 import google.api_core.exceptions
 
@@ -10,6 +13,13 @@ import state_data
 
 # Module-level variable to store keys
 _GEMINI_KEYS = []
+CACHE_DIR = "analysis_cache"
+_LAST_CALL_TM = 0.0
+_REQUEST_HISTORY = []
+
+# Ensure cache directory exists
+if not os.path.exists(CACHE_DIR):
+    os.makedirs(CACHE_DIR)
 
 def configure_genai(api_keys):
     """
@@ -33,6 +43,57 @@ def configure_genai(api_keys):
         return True
     return False
 
+def get_cached_analysis(address, weights=None):
+    """
+    Retrieve cached analysis if valid (exists and < 240 hours old).
+    Key is based on hash(address + weights).
+    """
+    try:
+        # Create a unique key based on address and weights
+        # Sort weights to ensure consistent hashing key for dicts
+        weight_str = json.dumps(weights, sort_keys=True) if weights else "None"
+        key_str = f"{address}_{weight_str}".encode('utf-8')
+        file_hash = hashlib.md5(key_str).hexdigest()
+        filename = os.path.join(CACHE_DIR, f"{file_hash}.pkl")
+        
+        if os.path.exists(filename):
+            # Check modification time
+            mtime = os.path.getmtime(filename)
+            file_time = datetime.datetime.fromtimestamp(mtime)
+            age = datetime.datetime.now() - file_time
+            
+            # 240 Hours = 10 Days
+            if age.total_seconds() < 240 * 3600:
+                with open(filename, 'rb') as f:
+                    data = pickle.load(f)
+                
+                # Inject cache metadata if not present
+                if '_cache_meta' not in data:
+                    data['_cache_meta'] = {'timestamp': file_time.strftime("%Y-%m-%d %H:%M:%S")}
+                return data
+    except Exception as e:
+        print(f"Cache usage error: {e}")
+        return None
+    return None
+
+def save_to_cache(address, data, weights=None):
+    """
+    Save analysis result to cache.
+    """
+    try:
+        weight_str = json.dumps(weights, sort_keys=True) if weights else "None"
+        key_str = f"{address}_{weight_str}".encode('utf-8')
+        file_hash = hashlib.md5(key_str).hexdigest()
+        filename = os.path.join(CACHE_DIR, f"{file_hash}.pkl")
+        
+        # Add metadata before saving
+        data['_cache_meta'] = {'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        
+        with open(filename, 'wb') as f:
+            pickle.dump(data, f)
+    except Exception as e:
+        print(f"Cache save error: {e}")
+
 def call_with_retry(func, max_retries=5):
     """
     Execute a function with exponential backoff for 429/ResourceExhausted errors.
@@ -53,8 +114,9 @@ def call_with_retry(func, max_retries=5):
             if not is_quota_error or i == max_retries - 1:
                 raise e
             
-            # Exponential Backoff
-            wait_time = (2 ** i) + random.uniform(0, 1)
+            # Exponential Backoff with higher base for strict limits
+            # 5s + 2^i + jitter (e.g., 6s, 8s, 10s...)
+            wait_time = 5.0 + (2 ** i) + random.uniform(0, 1)
             print(f"Quota hit. Retrying in {wait_time:.2f}s... (Attempt {i+1}/{max_retries})")
             time.sleep(wait_time)
     return None
@@ -63,8 +125,36 @@ def call_with_rotation(func_to_call, *args, **kwargs):
     """
     Helper to call a GenAI function with key rotation on quota error.
     Includes internal retry logic per key.
+    Implements Global Rate Limiting & Throttling.
     """
-    global _GEMINI_KEYS
+    global _GEMINI_KEYS, _LAST_CALL_TM, _REQUEST_HISTORY
+    
+    # --- Rate Limiting Logic ---
+    now = time.time()
+    
+    # 1. Minute Throttling (Sliding Window)
+    # Remove timestamps older than 60 seconds
+    _REQUEST_HISTORY = [t for t in _REQUEST_HISTORY if now - t < 60]
+    
+    if len(_REQUEST_HISTORY) > 15: # Max 15 requests per minute
+        print("Rate Limit: Throttling (Max 15 req/min). Waiting 5s...")
+        time.sleep(5) 
+        # Re-check or just proceed slowly? 
+        # A simple sleep allows basic recovery without complex queuing
+        
+    _REQUEST_HISTORY.append(now)
+    
+    # 2. Global Request Spacing (2-3s)
+    elapsed = now - _LAST_CALL_TM
+    if elapsed < 2.5:
+        # If we called it too recently, forced wait
+        delay = 2.5 - elapsed + random.uniform(0, 0.5)
+        print(f"Rate Limit: Spacing delay {delay:.2f}s")
+        time.sleep(delay)
+        
+    _LAST_CALL_TM = time.time()
+    
+    # --- End Rate Limiting ---
     
     # Try each key
     for i, key in enumerate(_GEMINI_KEYS):
@@ -94,6 +184,7 @@ def call_with_rotation(func_to_call, *args, **kwargs):
                 raise e
     return None
 
+
 def get_available_models():
     """
     List available models that support generation.
@@ -107,64 +198,72 @@ def get_available_models():
     except Exception as e:
         return [f"Error listing models: {str(e)}"]
 
-def estimate_census_data(address, model_name='models/gemini-1.5-flash'):
-    """
-    Estimate census data for a location using LLM knowledge.
-    """
-    try:
-        model = genai.GenerativeModel(model_name)
-        prompt = f"""
-        Provide a realistic ESTIMATE of demographic/census data for the location: "{address}".
-        
-        Return pure JSON with these exact keys:
-        - "population_density": (string, e.g. "High", "Low")
-        - "median_household_income": (string with currency)
-        - "median_age": (integer)
-        - "education_level": (string)
-        - "unemployment_rate": (string percentage)
-        - "housing_vacancy_rate": (string percentage)
-        - "top_industries": (list of strings)
-        
-        Based on general knowledge of the area.
-        """
-
-        def _generate():
-            response = model.generate_content(prompt)
-            data = json.loads(response.text.replace('```json', '').replace('```', '').strip())
-            return data
-
-        data = call_with_rotation(_generate)
-        return data
-    except Exception:
-        return {
-            "error": "Could not estimate census data."
-        }
-
-
 def analyze_location(address, poi_data, census_data, model_name='models/gemini-1.5-flash', weights=None):
     """
     Analyze the location using Gemini.
+    Merged functionality: Estimates Census data if missing, and provides Investment Analysis.
+    Now includes Result Caching (240 Hours).
     """
+    # 1. Check Cache
+    cached_result = get_cached_analysis(address, weights=weights)
+    if cached_result:
+        print("Using cached analysis.")
+        return cached_result
+
     # Handle short names vs full names
     if not model_name.startswith('models/'):
-        # If user selected a short name or we defaulted, try to align
         pass 
         
     try:
-        model = genai.GenerativeModel(model_name)
+        # Define Schema for Structured Output
+        # We want a robust JSON output
+        analysis_schema = {
+            "type": "OBJECT",
+            "properties": {
+                "highlights": {
+                    "type": "ARRAY", 
+                    "items": {"type": "STRING"}
+                },
+                "risks": {
+                    "type": "ARRAY", 
+                    "items": {"type": "STRING"}
+                },
+                "score": {"type": "INTEGER"},
+                "investment_strategy": {"type": "STRING"},
+                "estimated_census": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "metrics": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "median_household_income": {"type": "STRING", "description": "e.g. $75,000"},
+                                "education_bachelors_pct": {"type": "INTEGER", "description": "Percentage 0-100"},
+                                "population_density": {"type": "STRING", "description": "High/Medium/Low"}
+                            }
+                        }
+                    }
+                }
+            },
+            "required": ["highlights", "risks", "score", "investment_strategy"]
+        }
+        
+        # Configure model with valid generation config
+        generation_config = {
+            "response_mime_type": "application/json",
+            "response_schema": analysis_schema
+        }
+        
+        model = genai.GenerativeModel(
+            model_name=model_name,
+            generation_config=generation_config
+        )
         
         # Look up state benchmarks
-        # Try to extract state from address string (naive approach: look for state names)
-        # We can iterate through the keys in state_data.INCOME_DATA
-        detected_state = "United States" # Fallback
-        
-        # Simple lookup
+        detected_state = "United States" 
         for s_name in state_data.INCOME_DATA.keys():
             if s_name in address:
                 detected_state = s_name
                 break
-        
-        # Get benchmarks
         benchmarks = state_data.get_state_benchmarks(detected_state)
         
         # Construct prompt
@@ -176,49 +275,42 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
         You are a real estate investment expert. Analyze the following location data for "{address}".
         
         USER PRIORITIES (Weights 0-100):
-        The user has defined the following importance for different factors. 
-        HIGH weights mean you must prioritize this factor in your scoring AND highlights/risks.
         {weight_str}
+        Adjust your 'score', 'highlights', and 'risks' based on these priorities.
         
-        POI Data (Sample): {str(poi_data)[:2000]}... # Truncate if too long
-        Census Data (Target Location): {census_data}
+        INPUT DATA:
+        - POI Data (Sample): {str(poi_data)[:1500]}...
+        - Census Data (Provided): {census_data}
         
-        CONTEXTUAL BENCHMARKS (Use these for comparison):
-        State ({benchmarks['state_name']}) Median Income: ${benchmarks['state_income']:,}
-        State ({benchmarks['state_name']}) Education (HS+|Bach+|Grad+): {benchmarks['state_edu']}
-        State ({benchmarks['state_name']}) Age (Under18|18-24|25-44|45-64|65+): {benchmarks['state_age']}
-        State ({benchmarks['state_name']}) Race (White|Hisp|Black|Asian|Other): {benchmarks['state_race']}
+        INSTRUCTIONS:
+        1. If 'Census Data' is missing, empty, or invalid, you MUST ESTIMATE the 'estimated_census' fields (Income, Education, Density) based on the address location.
+        2. If 'Census Data' is provided, you can just mirror it in 'estimated_census' or refine it.
+        3. Provide 'highlights' (Max 4), 'risks' (Max 3), 'score' (0-100), and 'investment_strategy' (Max 50 words).
         
-        National Median Income: ${benchmarks['us_income']:,}
-        National Education (HS+|Bach+|Grad+): {benchmarks['us_edu']}
-        National Age (Under18|18-24|25-44|45-64|65+): {benchmarks['us_age']}
-        National Race (White|Hisp|Black|Asian|Other): {benchmarks['us_race']}
-        
-        Please provide an analysis in pure JSON format with the following keys:
-        - "highlights": [list of strings describing pros]. Max 4 points. Total word count for this list must be under 80 words.
-        - "risks": [list of strings describing cons]. Max 3 points. Total word count for this list must be under 60 words.
-        - "score": (integer 0-100). Use the Benchmarks to help determine if this is a high-income/educated area relative to the state/nation. ADJUST this score based on how well the location meets the USER PRIORITIES.
-        - "investment_strategy": (string describing brief strategy). Max 50 words.
-        
-        Do not use Markdown code blocks. Just valid JSON.
-        If there are any numbers or values, always make them **Bold**.
+        CONTEXTUAL BENCHMARKS:
+        State ({benchmarks['state_name']}) Income: ${benchmarks['state_income']:,}
+        National Income: ${benchmarks['us_income']:,}
         """
-        
-
         
         def _generate():
             response = model.generate_content(prompt)
-            # Attempt to clean code blocks if present
-            text_content = response.text.replace('```json', '').replace('```', '').strip()
-            data = json.loads(text_content)
-            return data
+            # With structured output, response.text should be valid JSON
+            return json.loads(response.text)
 
         data = call_with_rotation(_generate)
+        
+        # 2. Save to Cache
+        if data and "error" not in data:
+            save_to_cache(address, data, weights=weights)
+            
         return data
+
     except Exception as e:
+        print(f"Analysis Error: {e}")
         return {
             "highlights": ["Error generating analysis"],
-            "risks": [f"Model: {model_name}", str(e)],
+            "risks": [str(e)],
             "score": 0,
-            "investment_strategy": "Please check API Key or Model selection."
+            "investment_strategy": "System Error.",
+            "estimated_census": {"metrics": {}}
         }

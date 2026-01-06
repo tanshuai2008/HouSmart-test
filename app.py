@@ -297,7 +297,7 @@ with c_left:
     st.markdown('</div>', unsafe_allow_html=True)
     
     # Analyze Button
-    if st.button("Analyze Location", type="primary", use_container_width=True):
+    if st.button("Analyze Location", type="primary", use_container_width=True, disabled=st.session_state.processing):
          run_analysis_flow()
          
     # Hidden Model Selection for logic but simplified UI
@@ -321,102 +321,126 @@ with c_left:
 # ==========================================
 if st.session_state.processing:
     with c_mid:
-        loader_placeholder = st.empty()
-        components.render_loader(loader_placeholder, 5)
-
-        # Validation
-        user_email = st.session_state.email_input
-        address = st.session_state.input_address
-        if not user_email:
-            st.error("Email is required.")
-            st.session_state.processing = False
-            st.stop()
-        if not address:
-            st.error("Address is required.")
-            st.session_state.processing = False
-            st.stop()
+        # UX: Interactive Status
+        with st.status("Analyzing property...", expanded=True) as status:
             
-        usage_count = get_daily_usage(user_email)
-        if usage_count >= 3:
-            st.error("Daily limit reached.")
-            st.session_state.processing = False
-            st.stop()
+            # Validation
+            user_email = st.session_state.email_input
+            address = st.session_state.input_address
+            if not user_email:
+                status.update(label="Error: Email missing", state="error")
+                st.error("Email is required.")
+                st.session_state.processing = False
+                st.stop()
+            if not address:
+                status.update(label="Error: Address missing", state="error")
+                st.error("Address is required.")
+                st.session_state.processing = False
+                st.stop()
+                
+            usage_count = get_daily_usage(user_email)
+            if usage_count >= 3:
+                status.update(label="Error: Daily limit reached", state="error")
+                st.error("Daily limit reached.")
+                st.session_state.processing = False
+                st.stop()
+                
+            # Logging
+            st.write("Logging request...")
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                 # CSV Log
+                 log_dir = "logs"
+                 if not os.path.exists(log_dir): os.makedirs(log_dir)
+                 with open(os.path.join(log_dir, "usage_logs.csv"), 'a', newline='', encoding='utf-8') as f:
+                     writer = csv.writer(f)
+                     writer.writerow([timestamp, user_email, address])
+                 # GSheet Log
+                 sheet = connect_to_gsheet()
+                 if sheet: sheet.append_row([timestamp, user_email, address])
+            except Exception as e:
+                print(f"Logging Error: {e}")
             
-        # Logging
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        try:
-             # CSV Log
-             log_dir = "logs"
-             if not os.path.exists(log_dir): os.makedirs(log_dir)
-             with open(os.path.join(log_dir, "usage_logs.csv"), 'a', newline='', encoding='utf-8') as f:
-                 writer = csv.writer(f)
-                 writer.writerow([timestamp, user_email, address])
-             # GSheet Log
-             sheet = connect_to_gsheet()
-             if sheet: sheet.append_row([timestamp, user_email, address])
-        except Exception as e:
-            print(f"Logging Error: {e}")
-        
-        components.render_loader(loader_placeholder, 30)
-        
-        # 1. POI
-        geo_key = st.secrets.get("GEOAPIFY_API_KEY")
-        pois, lat, lon = data.get_poi(address, api_key=geo_key)
-        st.session_state.pois = pois
-        st.session_state.lat = lat
-        st.session_state.lon = lon
-        
-        components.render_loader(loader_placeholder, 50)
+            
+            # 1. POI
+            status.update(label="Fetching Location Data...", state="running")
+            st.write("Searching nearby amenities...")
+            geo_key = st.secrets.get("GEOAPIFY_API_KEY")
+            pois, lat, lon = data.get_poi(address, api_key=geo_key)
+            st.session_state.pois = pois
+            st.session_state.lat = lat
+            st.session_state.lon = lon
+            
+    
+            # 2. Census (Try Real Data first)
+            st.write("Retrieving Demographic Data...")
+            census = data.get_census_data(address)
+            # We DO NOT call estimate_census_data here to save API calls.
+            # It will be handled in analyze_location.
+            
+            
+            # 3. Rent Analysis
+            status.update(label="Analyzing Market...", state="running")
+            st.write("Calculating Rent Estimates...")
+            rent_key = st.secrets.get("RENTCAST_API_KEY")
+            if rent_key:
+                rent_data = data.get_rentcast_data(
+                    address, 
+                    st.session_state.input_bedrooms, 
+                    st.session_state.input_bathrooms,
+                    st.session_state.input_sqft,
+                    "Apartment", 
+                    rent_key
+                )
+                st.session_state.rent_data = rent_data
+            
+            
+            # 4. LLM Analysis (Integrated Analysis + Estimation)
+            status.update(label="Generating AI Report...", state="running")
+            st.write("Consulting AI Expert...")
+            model_name = st.session_state.get("input_model", "gemini-2.5-flash")
+            
+            
+            # Collect weights ONLY if "Normalized & Weighted" is selected
+            user_weights = None
+            if st.session_state.get("score_method_input") == "Normalized & Weighted":
+                user_weights = {f: st.session_state.get(f"w_{f}", 50) for f in factors}
+            
+            analysis = llm.analyze_location(address, pois, census, model_name=model_name, weights=user_weights)
+            
+            # Error Handling for 429/Quota
+            # Check risks/highlights for error signatures if exceptions were swallowed but reported
+            error_signature = False
+            for r in analysis.get('risks', []) + analysis.get('highlights', []):
+                if "429" in str(r) or "Quota" in str(r) or "ResourceExhausted" in str(r):
+                    error_signature = True
+                    break
+            
+            if error_signature:
+                status.update(label="System Busy", state="error")
+                st.error("System is busy. Your task has been saved. Please try again in 1 minute.")
+                st.caption("Error: API Quota Exceeded (429)")
+                st.session_state.processing = False
+                # Do not set analyzed=True so results don't show partially
+                st.stop()
 
-        # 2. Census (Try Real Data first)
-        census = data.get_census_data(address)
-        # We DO NOT call estimate_census_data here to save API calls.
-        # It will be handled in analyze_location.
-        
-        components.render_loader(loader_placeholder, 70)
-        
-        # 3. Rent Analysis
-        rent_key = st.secrets.get("RENTCAST_API_KEY")
-        if rent_key:
-            rent_data = data.get_rentcast_data(
-                address, 
-                st.session_state.input_bedrooms, 
-                st.session_state.input_bathrooms,
-                st.session_state.input_sqft,
-                "Apartment", 
-                rent_key
-            )
-            st.session_state.rent_data = rent_data
-        
-        components.render_loader(loader_placeholder, 80)
-        
-        # 4. LLM Analysis (Integrated Analysis + Estimation)
-        model_name = st.session_state.get("input_model", "gemini-2.5-flash")
-        
-        
-        # Collect weights ONLY if "Normalized & Weighted" is selected
-        user_weights = None
-        if st.session_state.get("score_method_input") == "Normalized & Weighted":
-            user_weights = {f: st.session_state.get(f"w_{f}", 50) for f in factors}
-        
-        analysis = llm.analyze_location(address, pois, census, model_name=model_name, weights=user_weights)
-        st.session_state.analysis = analysis
-        
-        # 5. Backfill Census if missing (using LLM estimate)
-        if not census or not census.get('metrics'):
-             estimated = analysis.get('estimated_census', {})
-             # Ensure structure matches what charts expect
-             if 'metrics' not in estimated:
-                 # Flattened or wrong structure? Schema should enforce it, but safety first
-                 census = {'metrics': estimated, 'source': 'AI (Estimated)'}
-             else:
-                 census = estimated
-                 census['source'] = 'AI (Estimated)'
-        
-        st.session_state.census = census
-        
-        components.render_loader(loader_placeholder, 100)
-        
+            st.session_state.analysis = analysis
+            
+            # 5. Backfill Census if missing (using LLM estimate)
+            if not census or not census.get('metrics'):
+                 estimated = analysis.get('estimated_census', {})
+                 # Ensure structure matches what charts expect
+                 if 'metrics' not in estimated:
+                     # Flattened or wrong structure? Schema should enforce it, but safety first
+                     census = {'metrics': estimated, 'source': 'AI (Estimated)'}
+                 else:
+                     census = estimated
+                     census['source'] = 'AI (Estimated)'
+            
+            st.session_state.census = census
+            
+            status.update(label="Analysis Complete!", state="complete", expanded=False)
+            
         st.session_state.processing = False
         st.session_state.analyzed = True
         st.rerun()
