@@ -110,10 +110,11 @@ with col1:
     # If we put elements in a container, the container is the div.
     
     with st.container():
-        st.text_input("User Email (required)", placeholder="email@example.com")
-        # Visual hint for "Red Border" - hard to do exactly on the PARENT card without precise JS/CSS hacking
-        # but we can style the input itself or add a markdown border.
-        st.markdown('<style>div[data-baseweb="input"] { border-color: #EA4335; }</style>', unsafe_allow_html=True)
+        # Red Box Container
+        st.markdown('<div class="email-card" style="padding: 10px; border-radius: 5px;">', unsafe_allow_html=True)
+        st.text_input("User Email", placeholder="email@example.com", label_visibility="visible")
+        st.markdown('</div>', unsafe_allow_html=True)
+
 
     # Card B: Property Details
     st.markdown("### Property Details")
