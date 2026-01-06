@@ -97,23 +97,36 @@ col1, col2, col3 = st.columns([2, 4, 4], gap="medium")
 with col1:
     # Card A: User Email
     st.markdown("### User Info")
-    # To mimic red border specific card, we can't easily style just THIS block parent div via pure CSS selectors in Streamlit 
-    # without `st.container` and experimental key or just treating the input as the card.
     
-    # We will use valid Streamlit way: A container styled via CSS specific class if possible, 
-    # but Streamlit CSS injection is global.
-    # Workaround: Put content inside a markdown div with styling? 
-    # No, inputs can't go inside markdown.
-    # We will just place the input. The global "Card Styling" applied to `stVerticalBlock > div` 
-    # might wrap EACH widget or groups? 
-    # Actually `stVerticalBlock > div` targets the direct children of the vertical layout. 
-    # If we put elements in a container, the container is the div.
+    # Logic for Red Border
+    if "user_email_input" not in st.session_state:
+        st.session_state.user_email_input = ""
+        
+    is_email_empty = not st.session_state.user_email_input.strip()
     
+    # Dynamic CSS for Red Border on the specific input
+    if is_email_empty:
+        st.markdown("""
+        <style>
+        /* Target the specific input widget if possible, or all text inputs in this container */
+        /* Since we have other inputs, we need to be careful. 
+           But this input is the first one in col1. */
+        div[data-testid="stTextInput"] input {
+            border: 2px solid #EA4335 !important;
+        }
+        div[data-testid="stTextInput"] label {
+            color: #EA4335 !important;
+            font-weight: 600;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        label_text = "User Email (Required)"
+    else:
+        label_text = "User Email"
+
     with st.container():
-        # Red Box Container
-        st.markdown('<div class="email-card" style="padding: 10px; border-radius: 5px;">', unsafe_allow_html=True)
-        st.text_input("User Email", placeholder="email@example.com", label_visibility="visible")
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Just the input, no extra wrapper that looks like a card inside a card
+        st.text_input(label_text, placeholder="email@example.com", key="user_email_input")
 
 
     # Card B: Property Details
