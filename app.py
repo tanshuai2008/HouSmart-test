@@ -14,6 +14,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import auth # Custom Auth Module
 import supabase_utils
+import data # Geocoding & Data Service
 
 # Page Configuration
 st.set_page_config(layout="wide", page_title="HouSmart Dashboard", page_icon="🏠")
@@ -315,7 +316,19 @@ if st.session_state.processing:
             # IMPORTANT: I must insert the User Prefs logic into `llm.py` (DONE).
             # In `app.py`, if I can't find `llm.analyze_location` call, I can't inject it.
             # Use `grep` to find `llm.analyze_location` in `app.py`.
-            pass
+            
+            # --- GEOCODING ---
+            geo_key = st.secrets.get("GEOAPIFY_API_KEY")
+            # Get address from session state or default
+            addr_to_geocode = st.session_state.get("address_input", "123 Market St, San Francisco, CA")
+            lat, lon = data.get_coordinates(addr_to_geocode, geo_key)
+            st.session_state.map_center = (lat, lon)
+            
+            # --- FETCH POIS (Optional - to be displayed on map if we persist them) ---
+            # pois, _, _ = data.get_poi(addr_to_geocode, geo_key)
+            # st.session_state.map_pois = pois
+
+            # --- LOGGING ---
             
             # --- LOGGING ---
             try:
@@ -456,7 +469,12 @@ with col3:
         st.subheader("Location Intelligence")
         
         # Center Map on Dummy Location (SF)
-        center_lat, center_lon = 37.7749, -122.4194
+        # Check if we have dynamic coordinates
+        if "map_center" in st.session_state:
+            center_lat, center_lon = st.session_state.map_center
+        else:
+            center_lat, center_lon = 37.7749, -122.4194
+            
         m = folium.Map(location=[center_lat, center_lon], zoom_start=14, prefer_canvas=True)
         
         # 1. Target Property (Red Star)
