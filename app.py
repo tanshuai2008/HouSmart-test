@@ -15,6 +15,7 @@ from google.oauth2.service_account import Credentials
 import auth # Custom Auth Module
 import supabase_utils
 import data # Geocoding & Data Service
+import llm # LLM Analysis Service
 
 # Page Configuration
 st.set_page_config(layout="wide", page_title="HouSmart Dashboard", page_icon="🏠")
