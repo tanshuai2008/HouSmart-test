@@ -11,6 +11,7 @@ import os
 import time
 import gspread
 from google.oauth2.service_account import Credentials
+import auth # Custom Auth Module
 
 # Page Configuration
 st.set_page_config(layout="wide", page_title="HouSmart Dashboard", page_icon="🏠")
@@ -18,6 +19,13 @@ st.set_page_config(layout="wide", page_title="HouSmart Dashboard", page_icon="�
 # Session State for Button Management
 if "processing" not in st.session_state:
     st.session_state.processing = False
+if "google_user" not in st.session_state:
+    st.session_state.google_user = None
+
+# Check for Callback (Run once at top)
+user_info = auth.handle_callback()
+if user_info:
+    st.session_state.google_user = user_info
 
 def start_processing():
     st.session_state.processing = True
@@ -171,39 +179,58 @@ with col1:
     # Using border=True to trigger the specific CSS class
     with st.container(border=True):
         st.markdown("### User Info")
-    
-        # Logic for Red Border
-        if "user_email_input" not in st.session_state:
-            st.session_state.user_email_input = ""
+        
+        final_user_email = ""
+        
+        # Case A: Google Logged In
+        if st.session_state.google_user:
+            google_email = st.session_state.google_user.get("email")
+            st.success(f"✅ Signed in as: **{google_email}**")
+            final_user_email = google_email
             
-        is_email_empty = not st.session_state.user_email_input.strip()
-        
-        # Dynamic CSS for Red Border on the specific input
-        if is_email_empty:
-            st.markdown("""
-            <style>
-            /* Target the specific input widget if possible, or all text inputs in this container */
-            /* Since we have other inputs, we need to be careful. 
-               But this input is the first one in col1. */
-            div[data-testid="stTextInput"] input {
-                border: 2px solid #EA4335 !important;
-            }
-            div[data-testid="stTextInput"] label {
-                color: #EA4335 !important;
-                font-weight: 600;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            label_text = "User Email (Required)"
+            if st.button("Sign Out"):
+                st.session_state.google_user = None
+                st.rerun()
+                
+        # Case B: Manual Input
         else:
-            label_text = "User Email"
-
-        # Just the input, no extra wrapper that looks like a card inside a card
-        email_val = st.text_input(label_text, placeholder="email@example.com", key="user_email_input")
+            st.caption("Sign in for a better experience")
+            auth.login_button()
+            st.markdown("---")
+    
+            # Logic for Red Border
+            if "user_email_input" not in st.session_state:
+                st.session_state.user_email_input = ""
+                
+            is_email_empty = not st.session_state.user_email_input.strip()
+            
+            # Dynamic CSS for Red Border on the specific input
+            if is_email_empty:
+                st.markdown("""
+                <style>
+                /* Target the specific input widget if possible, or all text inputs in this container */
+                /* Since we have other inputs, we need to be careful. 
+                   But this input is the first one in col1. */
+                div[data-testid="stTextInput"] input {
+                    border: 2px solid #EA4335 !important;
+                }
+                div[data-testid="stTextInput"] label {
+                    color: #EA4335 !important;
+                    font-weight: 600;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                label_text = "User Email (Required)"
+            else:
+                label_text = "User Email"
+    
+            # Just the input, no extra wrapper that looks like a card inside a card
+            email_val = st.text_input(label_text, placeholder="email@example.com", key="user_email_input")
+            final_user_email = email_val
         
-        # Display Usage Count
-        if email_val:
-            usage_count = get_daily_usage(email_val)
+        # Display Usage Count (Works for both)
+        if final_user_email:
+            usage_count = get_daily_usage(final_user_email)
             st.caption(f"Free Trial in past 24h: {usage_count}/3")
 
 
@@ -253,7 +280,10 @@ if st.session_state.processing:
                     
                     # Log Data
                     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    email = st.session_state.get("user_email_input", "unknown")
+                    
+                    # Determine Final Email Logic
+                    final_email = st.session_state.google_user.get("email") if st.session_state.google_user else st.session_state.get("user_email_input", "unknown")
+                    
                     # Address is just text input, default "123 Market St..." if not changed
                     # But notice the address input doesn't have a key in my previous view_file of app.py?
                     # Let's check session state keys used.
@@ -268,7 +298,7 @@ if st.session_state.processing:
                     # Warning: Need to ensure Address input HAS this key.
                     addr = st.session_state.get("address_input", "123 Market St, San Francisco, CA")
                     
-                    sheet.append_row([ts, email, addr, 0, 0, 0, 1])
+                    sheet.append_row([ts, final_email, addr, 0, 0, 0, 1])
                     
             except Exception as e:
                 print(f"Logging Error: {e}")
