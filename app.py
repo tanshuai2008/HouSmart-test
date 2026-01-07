@@ -20,6 +20,12 @@ import llm # LLM Analysis Service
 # Page Configuration
 st.set_page_config(layout="wide", page_title="HouSmart Dashboard", page_icon="🏠")
 
+# Initialize LLM
+if "GEMINI_API_KEY" in st.secrets:
+    llm.configure_genai(st.secrets["GEMINI_API_KEY"])
+else:
+    st.error("Missing GEMINI_API_KEY in secrets. Analysis will fail.")
+
 # Session State for Button Management
 if "processing" not in st.session_state:
     st.session_state.processing = False
@@ -546,7 +552,7 @@ with col2:
             st.subheader("AI Insight Summary")
         
         # Retrieve LLM Result
-        llm_res = st.session_state.get("llm_result", {})
+        llm_res = st.session_state.get("llm_result") or {}
         
         # Safe Getters
         score = llm_res.get("score", 0)
