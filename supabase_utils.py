@@ -125,3 +125,23 @@ def save_user_preferences(user_email, summary):
     except Exception as e:
         print(f"Supabase Prefs Write Error: {e}")
         return False
+
+def save_user_rating(user_email, rating, context=None):
+    """
+    Saves a user's star rating to the `user_ratings` table.
+    """
+    supabase = get_supabase_client()
+    if not supabase:
+        return False
+    
+    try:
+        data = {
+            "user_email": user_email,
+            "rating": rating,
+            "context": context
+        }
+        supabase.table("user_ratings").insert(data).execute()
+        return True
+    except Exception as e:
+        print(f"Error saving rating: {e}")
+        return False

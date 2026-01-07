@@ -1,4 +1,5 @@
 import streamlit as st
+import re
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -199,36 +200,56 @@ with col1:
             auth.login_button()
             st.markdown("---")
     
-            # Logic for Red Border
+            # Logic for Red Border - Consolidated
             if "user_email_input" not in st.session_state:
                 st.session_state.user_email_input = ""
-                
-            is_email_empty = not st.session_state.user_email_input.strip()
             
-            # Dynamic CSS for Red Border on the specific input
-            if is_email_empty:
-                st.markdown("""
-                <style>
-                /* Target the specific input widget if possible, or all text inputs in this container */
-                /* Since we have other inputs, we need to be careful. 
-                   But this input is the first one in col1. */
-                div[data-testid="stTextInput"] input {
-                    border: 2px solid #EA4335 !important;
-                }
-                div[data-testid="stTextInput"] label {
-                    color: #EA4335 !important;
-                    font-weight: 600;
-                    font-size: 1.1rem !important; /* Magnified Font Size */
-                }
-                </style>
-                """, unsafe_allow_html=True)
+            # Regex Validation
+            email_val = st.session_state.user_email_input.strip()
+            # Basic email pattern
+            email_pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+            is_email_valid = re.match(email_pattern, email_val) is not None
+            is_email_empty = not email_val
+            
+            # Determine if we show red border (Empty OR Invalid)
+            is_email_bad = is_email_empty or not is_email_valid
+            
+            # Determine Address Status (Check session state or default)
+            addr_val = st.session_state.get("address_input", "").strip()
+            # Note: Default value in widget is "123 Market..." so it might not be empty initially unless user clears it.
+            is_addr_bad = not addr_val
+            
+            # Determine Feedback Status
+            fb_val = st.session_state.get("feedback_input", "").strip()
+            is_fb_bad = not fb_val
+            
+            # Dynamic CSS injection
+            styles = []
+            if is_email_bad:
+                # Target the input by Label (covering both label states)
+                styles.append('input[aria-label="Or Input User Email"], input[aria-label="User Email"] { border: 2px solid #EA4335 !important; }')
+                # Style the Label too?
+                styles.append('div[data-testid="stTextInput"] label { color: #EA4335 !important; font-weight: 600; font-size: 1.1rem !important; }')
                 label_text = "Or Input User Email"
             else:
                 label_text = "User Email"
+                
+            if is_addr_bad:
+                styles.append('input[aria-label="Address"] { border: 2px solid #EA4335 !important; }')
+                
+            if is_fb_bad:
+                styles.append('textarea[aria-label="Your Feedback"] { border: 2px solid #EA4335 !important; }')
+
+            if styles:
+                st.markdown(f"<style>{''.join(styles)}</style>", unsafe_allow_html=True)
     
-            # Just the input, no extra wrapper that looks like a card inside a card
-            email_val = st.text_input(label_text, placeholder="email@example.com", key="user_email_input")
-            final_user_email = email_val
+            # Email Input
+            email_val_input = st.text_input(label_text, placeholder="email@example.com", key="user_email_input")
+            # If invalid format but not empty, maybe show a warning?
+            if email_val and not is_email_valid:
+                st.caption("⚠️ Please enter a valid email address.")
+                
+            final_user_email = email_val_input
         
         # Display Usage Count (Works for both)
         if final_user_email:
@@ -398,36 +419,9 @@ with col2:
         
         r2_c1, r2_c2 = st.columns(2)
         with r2_c1: st.plotly_chart(fig_race, use_container_width=True)
-        r2_c1, r2_c2 = st.columns(2)
-        with r2_c1: st.plotly_chart(fig_race, use_container_width=True)
         with r2_c2: st.plotly_chart(fig_edu, use_container_width=True)
 
-        # --- FEEDBACK / FINE-TUNE MODULE ---
-        with st.expander("Feedback / Fine-tune AI"):
-            st.caption("Help the AI understand your preferences better. Submitting feedback will refine future analyses for you.")
-            
-            feedback_text = st.text_area("What did you like or dislike about this property?", placeholder="e.g. I dislike properties near highways due to noise.")
-            
-            if st.button("Update Preferences"):
-                target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
-                
-                if not target_email or target_email == "unknown":
-                    st.error("Please sign in or provide an email to save preferences.")
-                elif not feedback_text:
-                    st.warning("Please enter some feedback.")
-                else:
-                    with st.spinner("Refining your profile..."):
-                        # 1. Get current prefs
-                        current_prefs = supabase_utils.get_user_preferences(target_email)
-                        
-                        # 2. Refine using LLM
-                        new_summary = llm.refine_preferences(current_prefs, feedback_text)
-                        
-                        # 3. Save
-                        if supabase_utils.save_user_preferences(target_email, new_summary):
-                            st.success("Preferences updated! Future analyses will consider this.")
-                        else:
-                            st.error("Failed to save preferences. Check connection.")
+
 
 
     # Card D: AI Insight Summary
@@ -508,3 +502,69 @@ with col3:
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
         """
         st.markdown(legend_html, unsafe_allow_html=True)
+
+    # --- USER FEEDBACK LOOP ---
+    # --- USER FEEDBACK LOOP ---
+    with st.expander("🎯 Fine-tune AI Preferences", expanded=True):
+        st.caption("Tell AI your preferences (e.g., 'I dislike noise', 'I need a park nearby').")
+        
+        # Custom Header for Feedback
+        st.markdown("### Your Feedback")
+        
+        # Feedback Input (No Form)
+        # Using label="Your Feedback" but hidden visibility to ensure aria-label exists for CSS
+        user_input = st.text_area("Your Feedback", height=100, 
+                                 placeholder="For example: I do not want to be close to the highway...",
+                                 key="feedback_input",
+                                 label_visibility="collapsed")
+                                 
+        if st.button("Submit Feedback"):
+            target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
+            
+            if not target_email or target_email == "unknown":
+                st.error("Please sign in to save preferences.")
+            elif not user_input:
+                st.warning("Please enter some feedback.")
+            else:
+                try:
+                    current_prefs = supabase_utils.get_user_preferences(target_email)
+                    new_summary = llm.refine_preferences(current_prefs, user_input)
+                    if supabase_utils.save_user_preferences(target_email, new_summary):
+                        st.toast("✅ AI has remembered your preference!")
+                        # Optional cleanup if we could, but streamlit can't easily clear widget state effectively without tricky callbacks
+                    else:
+                        st.error("Failed to save preferences.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    # --- STAR RATING COMPONENT ---
+    st.markdown("### Rate this Analysis")
+    # Using columns to create a rating UI
+    rate_cols = st.columns([4, 1])
+    with rate_cols[0]:
+        # Using a slider or radio for stars since st_star_rating is not native
+        # Using st.feedback if available (Streamlit 1.27+), else fallback
+        # Checking if st.feedback is valid isn't easy without running, so we'll use a reliable st.radio horizontal with emojis
+        rating_val = st.radio("How helpful was this analysis?", [1, 2, 3, 4, 5], 
+                             format_func=lambda x: "⭐" * x, 
+                             horizontal=True,
+                             index=None,
+                             key="user_rating_widget")
+    
+    with rate_cols[1]:
+        # "Submit" button for rating, but per user request "Instant effect... save without refreshing" 
+        # actually user asked for "Additional Submit Button" AND "Instant effect" which is contradictory or means "Click Submit to save instantly".
+        # We will use a button that triggers the save.
+        if st.button("Submit Rating"):
+            if rating_val:
+                target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
+                
+                # Context could be the Address being analyzed
+                ctx = f"Address: {st.session_state.get('address_input', 'Unknown')}"
+                
+                if supabase_utils.save_user_rating(target_email, rating_val, context=ctx):
+                    st.toast(f"Thanks for rating {rating_val} stars!")
+                else:
+                    st.error("Could not save rating.")
+            else:
+                st.warning("Please select a rating.")
