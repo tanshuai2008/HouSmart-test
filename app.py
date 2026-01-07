@@ -217,10 +217,11 @@ with col1:
                 div[data-testid="stTextInput"] label {
                     color: #EA4335 !important;
                     font-weight: 600;
+                    font-size: 1.1rem !important; /* Magnified Font Size */
                 }
                 </style>
                 """, unsafe_allow_html=True)
-                label_text = "User Email (Required)"
+                label_text = "Or Input User Email"
             else:
                 label_text = "User Email"
     
@@ -378,21 +379,21 @@ with col2:
         with c_score:
             st.metric("AI Score", "85/100", delta="High Opportunity")
 
-        st.info("Based on a comprehensive analysis of the local demographic trends, economic indicators, and amenity access, this property represents a **High Opportunity** investment. The area is witnessing a significant influx of young professionals (ages 19-35), driving demand for modern housing. Income levels are robust, with over 60% of households earning above $100k, surpassing both state and national averages. While HOA fees are higher than the market median, the strong appreciation potential (+5% YoY) and excellent walkability make this a prime location for long-term growth.", icon="🤖")
+        st.info("Based on a comprehensive analysis of the local demographic trends, economic indicators, and amenity access, this property represents a **High Opportunity** investment. The area is witnessing a significant influx of young professionals (ages **19-35**), driving demand for modern housing. Income levels are robust, with over **60%** of households earning above **$100k**, surpassing both state and national averages. While HOA fees are higher than the market median, the strong appreciation potential (**+5%** YoY) and excellent walkability make this a prime location for long-term growth.", icon="🤖")
         
         ai_c1, ai_c2 = st.columns(2)
         with ai_c1:
             st.markdown("**Key Advantages**")
-            st.success("✅ **High Walk Score (92)**\nLocated within a 'Walker's Paradise', daily errands do not require a car, significantly boosting tenant appeal and property value.")
-            st.success("✅ **Strong Appreciation (+5% YoY)**\nThe neighborhood has consistently outperformed the broader market, driven by limited inventory and high demand from tech workers.")
-            st.success("✅ **Low Crime Rate**\nSafety statistics indicate this area is in the top 10% safest neighborhoods in the city, lowering insurance costs and tenant turnover.")
-            st.success("✅ **Top Rated Schools**\nZoned for 9/10 rated elementary and high schools, making it highly desirable for families looking to settle long-term.")
+            st.success("✅ **High Walk Score (**92**)**\nLocated within a 'Walker's Paradise', daily errands do not require a car, significantly boosting tenant appeal and property value.")
+            st.success("✅ **Strong Appreciation (**+5%** YoY)**\nThe neighborhood has consistently outperformed the broader market, driven by limited inventory and high demand from tech workers.")
+            st.success("✅ **Low Crime Rate**\nSafety statistics indicate this area is in the top **10%** safest neighborhoods in the city, lowering insurance costs and tenant turnover.")
+            st.success("✅ **Top Rated Schools**\nZoned for **9/10** rated elementary and high schools, making it highly desirable for families looking to settle long-term.")
 
         with ai_c2:
             st.markdown("**Potential Risks**")
-            st.warning("⚠️ **High HOA Fees**\nMonthly association dues are 20% above the city median, which may impact net cash flow if rent prices stagnate.")
+            st.warning("⚠️ **High HOA Fees**\nMonthly association dues are **20%** above the city median, which may impact net cash flow if rent prices stagnate.")
             st.warning("⚠️ **Noise Levels (Moderate)**\nProximity to main transit corridors results in elevated ambient noise during rush hours, potentially affecting street-facing units.")
-            st.warning("⚠️ **Market Saturation**\nA high number of new condo developments in the pipeline (500+ units) could temporarily soften rental yields in the next 12-18 months.")
+            st.warning("⚠️ **Market Saturation**\nA high number of new condo developments in the pipeline (**500+** units) could temporarily soften rental yields in the next **12-18** months.")
 
 # --- COLUMN 3: MAP (40%) ---
 with col3:
