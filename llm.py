@@ -301,10 +301,17 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
         prefs_section = ""
         if user_prefs:
             prefs_section = f"""
-        [IMPORTANT: USER PREFERENCES]
-        The user has specific preferences or dislikes. Please STRICTLY respect these rules.
-        If the property violates any 'avoid' or 'dislike' rules, you MUST explicitly highlight it in the 'risks' section with a ⚠️ icon.
+        [IMPORTANT: USER PREFERENCE ANALYSIS]
+        The user has specific preferences (see below). When analyzing, do NOT simply say "Recommended" or "Not Recommended" based on these.
+        Instead, follow this "Objective Evidence" protocol:
         
+        1. DETECT CONFLICT: Check if the property data conflicts with USER PREFERENCES.
+        2. EXTRACT EVIDENCE: Search for QUANTITATIVE data (e.g., "0.5 miles from highway", "2 mins to train") or specific QUALITATIVE descriptions.
+        3. NEUTRAL ALERT: If a potential conflict is found, you MUST add a warning in the 'risks' array using this EXACT format:
+           "⚠️ Preference Alert: You previously mentioned dislike for [Preference Item]. This property [Specific Evidence]. Please determine if this is acceptable."
+           
+        Example: "⚠️ Preference Alert: You dislike highway noise. This property is located 0.5 miles from I-95. Please determine if this is acceptable."
+
         USER PREFERENCES CONTEXT:
         {user_prefs}
         """
