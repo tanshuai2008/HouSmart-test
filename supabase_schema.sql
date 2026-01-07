@@ -12,3 +12,10 @@ CREATE INDEX IF NOT EXISTS idx_property_logs_address ON property_logs(address);
 
 -- Optional: Create an index on created_at for cleanup/time-based queries
 CREATE INDEX IF NOT EXISTS idx_property_logs_created_at ON property_logs(created_at);
+
+-- [NEW] User Preferences Table
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_email TEXT PRIMARY KEY,
+    preference_summary TEXT, -- Stores the "refined rules" as text
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);

@@ -82,3 +82,46 @@ def save_analysis(user_email, address, result_json):
     except Exception as e:
         print(f"Supabase Write Error: {e}")
         return False
+
+def get_user_preferences(user_email):
+    """
+    Retrieve specific refined preferences for a user.
+    """
+    supabase = get_supabase_client()
+    if not supabase or not user_email: 
+        return None
+        
+    try:
+        data = supabase.table("user_preferences")\
+            .select("preference_summary")\
+            .eq("user_email", user_email)\
+            .execute()
+            
+        if data.data and len(data.data) > 0:
+            return data.data[0].get("preference_summary")
+        return None
+    except Exception as e:
+        print(f"Supabase Prefs Read Error: {e}")
+        return None
+
+def save_user_preferences(user_email, summary):
+    """
+    Upsert user preferences.
+    """
+    supabase = get_supabase_client()
+    if not supabase or not user_email:
+        return False
+        
+    try:
+        record = {
+            "user_email": user_email,
+            "preference_summary": summary,
+            "last_updated": datetime.datetime.utcnow().isoformat()
+        }
+        
+        # Upsert
+        supabase.table("user_preferences").upsert(record).execute()
+        return True
+    except Exception as e:
+        print(f"Supabase Prefs Write Error: {e}")
+        return False

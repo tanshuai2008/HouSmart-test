@@ -202,17 +202,25 @@ def get_available_models():
     except Exception as e:
         return [f"Error listing models: {str(e)}"]
 
-def analyze_location(address, poi_data, census_data, model_name='models/gemini-1.5-flash', weights=None):
+def analyze_location(address, poi_data, census_data, model_name='models/gemini-1.5-flash', weights=None, user_prefs=None):
     """
     Analyze the location using Gemini.
     Merged functionality: Estimates Census data if missing, and provides Investment Analysis.
     Now includes Result Caching (240 Hours).
     """
-    # 1. Check Cache
-    cached_result = get_cached_analysis(address, weights=weights)
-    if cached_result:
-        print("Using cached analysis.")
-        return cached_result
+    # 1. Check Cache (Include user_prefs in cache key if significant, but for simplicity, we might just re-run or rely on weights)
+    # Actually, if preferences change, we SHOULD re-run analysis. 
+    # Let's include user_prefs in the cache key/hash logic implicitly or explicitly?
+    # For now, let's strictly pass "user_prefs" into the prompt.
+    # To avoid stale cache invalidation issues, we should ideally include it in the hash, 
+    # but the cache function signature needs update.
+    # Alternative: Disable cache if user_prefs are provided? Or just risk it?
+    # Let's bypass cache if user_prefs is present to ensure fresh "Warning" generation.
+    if not user_prefs:
+        cached_result = get_cached_analysis(address, weights=weights)
+        if cached_result:
+            print("Using cached analysis.")
+            return cached_result
 
     # 1.5 Get Config
     config = config_manager.get_config()
@@ -287,15 +295,26 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
         benchmarks = state_data.get_state_benchmarks(detected_state)
         
         # Construct prompt
-        weight_str = "None (Use Defaults)"
         if weights:
             weight_str = json.dumps(weights, indent=2)
+
+        prefs_section = ""
+        if user_prefs:
+            prefs_section = f"""
+        [IMPORTANT: USER PREFERENCES]
+        The user has specific preferences or dislikes. Please STRICTLY respect these rules.
+        If the property violates any 'avoid' or 'dislike' rules, you MUST explicitly highlight it in the 'risks' section with a ⚠️ icon.
+        
+        USER PREFERENCES CONTEXT:
+        {user_prefs}
+        """
 
         prompt = f"""
         You are a real estate investment expert. Analyze the following location data for "{address}".
         
         USER PRIORITIES (Weights 0-100):
         {weight_str}
+        {prefs_section}
         Adjust your 'score', 'highlights', and 'risks' based on these priorities.
         
         INPUT DATA:
@@ -334,3 +353,38 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
             "investment_strategy": "System Error.",
             "estimated_census": {"metrics": {}}
         }
+
+def refine_preferences(current_summary, new_feedback, model_name='models/gemini-1.5-flash'):
+    """
+    Refine the user's preference summary based on new feedback.
+    """
+    try:
+        model = genai.GenerativeModel(model_name)
+        
+        prompt = f"""
+        You are a Personal Real Estate Preference Assistant.
+        
+        CURRENT PREFERENCE SUMMARY:
+        "{current_summary or 'No prior preferences.'}"
+        
+        NEW USER FEEDBACK:
+        "{new_feedback}"
+        
+        TASK:
+        Update and refine the "Current Preference Summary" to incorporate the "New User Feedback".
+        - Convert specific feedback into general rules (e.g., "Too noisy here" -> "Avoid areas with high noise levels").
+        - Keep it concise (bullet points or a short paragraph).
+        - If the new feedback contradicts old preferences, update to reflect the LATEST feedback.
+        
+        OUTPUT (The new summary ONLY):
+        """
+        
+        response = call_with_rotation(lambda: model.generate_content(prompt))
+        if response and response.text:
+            return response.text.strip()
+        return current_summary
+        
+    except Exception as e:
+        print(f"Preference Refinement Error: {e}")
+        # Fallback: Just append
+        return f"{current_summary}\n- {new_feedback}" if current_summary else new_feedback
