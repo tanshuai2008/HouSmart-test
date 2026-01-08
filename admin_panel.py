@@ -49,6 +49,24 @@ with st.form("settings_form"):
         help="If enabled, users can adjust scoring weights in the main app."
     )
 
+    st.subheader("🛡️ User Restrictions")
+    
+    enable_daily_limit = st.toggle(
+        "Enable Daily Usage Limit (3 Queries/Day)",
+        value=config.get("enable_daily_limit", True),
+        help="If disabled, users can query unlimited times."
+    )
+    
+    # Whitelist input
+    current_whitelist = config.get("whitelist_emails", [])
+    whitelist_str = "\n".join(current_whitelist)
+    
+    whitelist_input = st.text_area(
+        "Whitelist Emails (Unlimited Access)",
+        value=whitelist_str,
+        help="Enter emails separated by commmas or newlines. These users will bypass the daily limit."
+    )
+
     st.subheader("💾 Cache Settings")
     
     cache_ttl = st.number_input(
@@ -63,11 +81,18 @@ with st.form("settings_form"):
     submitted = st.form_submit_button("Save Changes", type="primary")
 
     if submitted:
+        # Process whitelist
+        # Split by comma or newline, strip whitespace, remove empty
+        raw_list = whitelist_input.replace(",", "\n").split("\n")
+        final_whitelist = [x.strip().lower() for x in raw_list if x.strip()]
+        
         new_config = {
             "model_name": selected_model,
             "temperature": temperature,
             "customized_scoring_method": customized_scoring_method,
-            "cache_ttl_hours": cache_ttl
+            "cache_ttl_hours": cache_ttl,
+            "enable_daily_limit": enable_daily_limit,
+            "whitelist_emails": final_whitelist
         }
         
         if config_manager.save_config(new_config):

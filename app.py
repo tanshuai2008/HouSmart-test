@@ -282,9 +282,30 @@ with col1:
             
         st.selectbox("Property Type", ["Single Family", "Townhouse", "Condo", "Apartment"])
         # Limit Check Logic
+        import config_manager
+        app_config = config_manager.config_manager.get_config()
+        
+        enable_limit = app_config.get("enable_daily_limit", True)
+        whitelist = app_config.get("whitelist_emails", [])
+        
         current_email = st.session_state.google_user.get("email") if st.session_state.google_user else st.session_state.get("user_email_input", "")
         usage = get_daily_usage(current_email) if current_email else 0
-        limit_reached = usage >= 3
+        
+        # Determine strict limit reached
+        limit_reached = False
+        
+        # Logic: 
+        # 1. If global limit is DISABLED -> Limit NOT reached
+        # 2. If user is in whitelist -> Limit NOT reached
+        # 3. Otherwise -> Check usage >= 3
+        
+        if not enable_limit:
+            limit_reached = False
+        elif getattr(current_email, "lower", lambda: "")().strip() in whitelist:
+             limit_reached = False
+        else:
+            if usage >= 3:
+                limit_reached = True
         
         btn_label = "Start Analysis"
         if limit_reached:
@@ -541,6 +562,66 @@ with col2:
         with r2_c1: st.plotly_chart(fig_race, use_container_width=True)
         with r2_c2: st.plotly_chart(fig_edu, use_container_width=True)
 
+        #################################################################
+        # RENTCAST INTEGRATION (Comps Table & Chart)
+        #################################################################
+        
+        # Only show if we have rent data
+        rent_d = st.session_state.get("rent_data", {})
+        if rent_d and "comparables" in rent_d:
+            comps = rent_d["comparables"] # List of dicts
+            
+            if comps:
+                st.markdown("#### 🏘️ Rental Comparables")
+                
+                # 1. Prepare Data for Table
+                # Rows: Comp 1, Comp 2, Comp 3
+                # Cols: Bed #, Bath #, Sqft
+                
+                table_data = []
+                index_labels = []
+                chart_labels = []
+                chart_values = []
+                
+                for i, c in enumerate(comps):
+                    label = f"Comp {i+1}"
+                    index_labels.append(label)
+                    
+                    # Ensure values are present (handle None)
+                    bed = c.get("bedrooms", "N/A")
+                    bath = c.get("bathrooms", "N/A")
+                    sqft = c.get("squareFootage", "N/A")
+                    price = c.get("price", 0)
+                    
+                    table_data.append([bed, bath, sqft])
+                    
+                    chart_labels.append(label)
+                    chart_values.append(price)
+
+                # Create DataFrame
+                df_comps = pd.DataFrame(table_data, columns=["Bed #", "Bath #", "Sqft"], index=index_labels)
+                
+                # Metric Display: Estimated Rent
+                est_rent = rent_d.get("estimated_rent", 0)
+                st.metric("Estimated Monthly Rent", f"${est_rent:,}")
+                
+                # 2. Display Table
+                st.table(df_comps)
+                
+                # 3. Comparables Chart
+                fig_rent = px.bar(
+                    x=chart_labels, 
+                    y=chart_values, 
+                    title="Comparable Rental Estimates ($)",
+                    labels={"x": "Property", "y": "Rent ($)"},
+                    text_auto='.2s',
+                    height=250
+                )
+                fig_rent.update_traces(marker_color='#34A853', textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
+                fig_rent.update_layout(margin=dict(l=0,r=0,t=30,b=0), yaxis_title=None)
+                
+                st.plotly_chart(fig_rent, use_container_width=True)
+
 
 
 
@@ -675,22 +756,22 @@ with col3:
     with st.container(border=True): # Wrap in container per request
         st.markdown("### Rate this Analysis")
         # Using columns to create a rating UI
-        rate_cols = st.columns([4, 1])
-        with rate_cols[0]:
-            # Using a slider or radio for stars since st_star_rating is not native
-            # Using st.feedback if available (Streamlit 1.27+), else fallback
-            # Checking if st.feedback is valid isn't easy without running, so we'll use a reliable st.radio horizontal with emojis
-            rating_val = st.radio("How helpful was this analysis?", [1, 2, 3, 4, 5], 
-                                 format_func=lambda x: "⭐" * x, 
-                                 horizontal=True,
-                                 index=None,
-                                 key="user_rating_widget")
+        st.markdown("### Rate this Analysis")
         
-        with rate_cols[1]:
-            # "Submit" button for rating, but per user request "Instant effect... save without refreshing" 
-            # actually user asked for "Additional Submit Button" AND "Instant effect" which is contradictory or means "Click Submit to save instantly".
-            # We will use a button that triggers the save.
-            if st.button("Submit Rating"):
+        # Use full width or adjust columns
+        # User wants "5 rating options on one line". horizontal=True produces this.
+        # Maybe the label "How helpful..." was taking up space or causing wrap?
+        
+        rating_val = st.radio(
+            "How helpful was this analysis?", 
+            [1, 2, 3, 4, 5], 
+            format_func=lambda x: f"{x} ⭐", 
+            horizontal=True,
+            index=None,
+            key="user_rating_widget"
+        )
+        
+        if st.button("Submit Rating"):
                 if rating_val:
                     target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
                     

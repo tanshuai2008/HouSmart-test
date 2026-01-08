@@ -9,7 +9,9 @@ DEFAULT_CONFIG = {
     "model_name": "gemini-2.5-flash",
     "temperature": 0.7,
     "customized_scoring_method": False,
-    "cache_ttl_hours": 240
+    "cache_ttl_hours": 240,
+    "enable_daily_limit": True,
+    "whitelist_emails": []
 }
 
 class ConfigManager:

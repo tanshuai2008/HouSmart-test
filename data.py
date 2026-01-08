@@ -395,11 +395,15 @@ def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key
             comps.sort(key=lambda x: x.get("similarityScore", 0), reverse=True)
             
             top_3 = []
+            top_3 = []
             for c in comps[:3]:
                 top_3.append({
                     "address": c.get("formattedAddress"),
                     "price": c.get("price"),
-                    "similarity": c.get("similarityScore")
+                    "similarity": c.get("similarityScore"),
+                    "bedrooms": c.get("bedrooms"),
+                    "bathrooms": c.get("bathrooms"),
+                    "squareFootage": c.get("squareFootage")
                 })
                 
             return {
