@@ -566,6 +566,10 @@ with col2:
         # RENTCAST INTEGRATION (Comps Table & Chart)
         #################################################################
         
+        # Debug Check
+        if not st.secrets.get("RENTCAST_API_KEY"):
+            st.error("⚠️ Configuration Error: 'RENTCAST_API_KEY' is missing in secrets.toml.")
+        
         # Only show if we have rent data
         rent_d = st.session_state.get("rent_data", {})
         if rent_d and "comparables" in rent_d:
@@ -621,6 +625,10 @@ with col2:
                 fig_rent.update_layout(margin=dict(l=0,r=0,t=30,b=0), yaxis_title=None)
                 
                 st.plotly_chart(fig_rent, use_container_width=True)
+            else:
+                 st.info("Rental Analysis: No comparable data returned by RentCast.")
+        else:
+            st.info("Rental Analysis: No data available (RentCast API returned empty or invalid).")
 
 
 
@@ -753,34 +761,58 @@ with col3:
                     st.error(f"Error: {e}")
 
     # --- STAR RATING COMPONENT ---
-    with st.container(border=True): # Wrap in container per request
+    # --- CSS FOR LARGER STARS ---
+    st.markdown("""
+    <style>
+    div[data-testid="stFeedback"] > ul > li > span {
+        font-size: 2.5rem !important;
+    }
+    div[data-testid="stFeedback"] {
+        margin-bottom: -15px; 
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --- STAR RATING COMPONENT ---
+    with st.container(border=True):
         st.markdown("### Rate this Analysis")
         
-        # Use st.feedback if available (Streamlit 1.31+) for click-once stars
-        # Fallback to slider if not available
-        rating_val = 0
+        rate_col1, rate_col2 = st.columns([2, 1])
         
-        if hasattr(st, "feedback"):
-            # st.feedback returns the value (0-4 usually? or 1-5? docs say it returns index or value)
-            # 'stars' mode.
-            rating_input = st.feedback("stars", key="user_rating_widget")
-            if rating_input is not None:
-                rating_val = rating_input + 1 # 0-indexed usually
-        else:
-            # Fallback for older streamlit: Slider with 0.5 steps
-            rating_val = st.slider("Rating", 0.0, 5.0, 0.0, 0.5, format="%.1f ⭐")
-            
-        if rating_val > 0:
-            # Auto-submit or Button? User said "Click once". 
-            # st.feedback triggers rerun on click. So we can process it immediately.
-            # But we might want to ensure we don't save duplicate ratings on every rerun?
-            # For MVP, just save or toast.
-            target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
-            ctx = f"Address: {st.session_state.get('address_input', 'Unknown')}"
-            
-            if target_email:
-                supabase_utils.save_user_rating(target_email, rating_val, context=ctx)
-                st.toast(f"Thanks for rating {rating_val} stars!")
+        with rate_col1:
+            # Use st.feedback if available
+            rating_val = 0
+            if hasattr(st, "feedback"):
+                # Using key='user_rating_widget' 
+                # Note: st.feedback updates session state immediately on click.
+                # We just read it when button is clicked.
+                st.feedback("stars", key="user_rating_widget")
             else:
-                # If guest, just say thanks
-                st.toast(f"Thanks for rating!")
+                st.slider("Rating", 0.0, 5.0, 0.0, 0.5, key="user_rating_widget")
+        
+        with rate_col2:
+            st.write("") # Spacer
+            st.write("") 
+            if st.button("Submit Rating", type="primary", use_container_width=True):
+                 # Retrieve value from widget state
+                 raw_val = st.session_state.get("user_rating_widget")
+                 
+                 # Adjust for 0-index if using feedback
+                 final_rating = 0
+                 if raw_val is not None:
+                     if hasattr(st, "feedback") and isinstance(raw_val, int):
+                         final_rating = raw_val + 1
+                     else:
+                         final_rating = raw_val
+                 
+                 if final_rating > 0:
+                    target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
+                    ctx = f"Address: {st.session_state.get('address_input', 'Unknown')}"
+                    
+                    if target_email:
+                        supabase_utils.save_user_rating(target_email, final_rating, context=ctx)
+                        st.toast(f"✅ Submitted {final_rating} Stars!")
+                    else:
+                        st.toast(f"✅ Thanks for rating!")
+                 else:
+                    st.warning("Please select stars first.")
