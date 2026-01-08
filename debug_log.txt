@@ -22,3 +22,7 @@ Starting Census Fetch for: 123 Market St, San Francisco, CA
 Geode Result: {'full_geoid': '060750615071', 'state': '06', 'county': '075', 'tract': '061507', 'block_group': '1'}
 ACS Result Count: 14
 Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 123 Market St, San Francisco, CA
+Geode Result: {'full_geoid': '060750615071', 'state': '06', 'county': '075', 'tract': '061507', 'block_group': '1'}
+ACS Result Count: 14
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])

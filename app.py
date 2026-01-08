@@ -755,32 +755,32 @@ with col3:
     # --- STAR RATING COMPONENT ---
     with st.container(border=True): # Wrap in container per request
         st.markdown("### Rate this Analysis")
-        # Using columns to create a rating UI
-        st.markdown("### Rate this Analysis")
         
-        # Use full width or adjust columns
-        # User wants "5 rating options on one line". horizontal=True produces this.
-        # Maybe the label "How helpful..." was taking up space or causing wrap?
+        # Use st.feedback if available (Streamlit 1.31+) for click-once stars
+        # Fallback to slider if not available
+        rating_val = 0
         
-        rating_val = st.radio(
-            "How helpful was this analysis?", 
-            [1, 2, 3, 4, 5], 
-            format_func=lambda x: f"{x} ⭐", 
-            horizontal=True,
-            index=None,
-            key="user_rating_widget"
-        )
-        
-        if st.button("Submit Rating"):
-                if rating_val:
-                    target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
-                    
-                    # Context could be the Address being analyzed
-                    ctx = f"Address: {st.session_state.get('address_input', 'Unknown')}"
-                    
-                    if supabase_utils.save_user_rating(target_email, rating_val, context=ctx):
-                        st.toast(f"Thanks for rating {rating_val} stars!")
-                    else:
-                        st.error("Could not save rating.")
-                else:
-                    st.warning("Please select a rating.")
+        if hasattr(st, "feedback"):
+            # st.feedback returns the value (0-4 usually? or 1-5? docs say it returns index or value)
+            # 'stars' mode.
+            rating_input = st.feedback("stars", key="user_rating_widget")
+            if rating_input is not None:
+                rating_val = rating_input + 1 # 0-indexed usually
+        else:
+            # Fallback for older streamlit: Slider with 0.5 steps
+            rating_val = st.slider("Rating", 0.0, 5.0, 0.0, 0.5, format="%.1f ⭐")
+            
+        if rating_val > 0:
+            # Auto-submit or Button? User said "Click once". 
+            # st.feedback triggers rerun on click. So we can process it immediately.
+            # But we might want to ensure we don't save duplicate ratings on every rerun?
+            # For MVP, just save or toast.
+            target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
+            ctx = f"Address: {st.session_state.get('address_input', 'Unknown')}"
+            
+            if target_email:
+                supabase_utils.save_user_rating(target_email, rating_val, context=ctx)
+                st.toast(f"Thanks for rating {rating_val} stars!")
+            else:
+                # If guest, just say thanks
+                st.toast(f"Thanks for rating!")

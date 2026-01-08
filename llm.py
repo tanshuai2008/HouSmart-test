@@ -202,7 +202,7 @@ def get_available_models():
     except Exception as e:
         return [f"Error listing models: {str(e)}"]
 
-def analyze_location(address, poi_data, census_data, model_name='models/gemini-1.5-flash', weights=None, user_prefs=None):
+def analyze_location(address, poi_data, census_data, model_name=None, weights=None, user_prefs=None):
     """
     Analyze the location using Gemini.
     Merged functionality: Estimates Census data if missing, and provides Investment Analysis.
@@ -231,6 +231,9 @@ def analyze_location(address, poi_data, census_data, model_name='models/gemini-1
     # However, app.py passes model_name from st.session_state. We should update app.py to get it from config.
     # Here we just ensure we have a fallback or override if needed.
     # Actually, let's just use the config for temperature effectively.
+    
+    if not model_name:
+        model_name = config.get("model_name", "models/gemini-2.5-flash")
     
     current_model_name = model_name
     temperature = config.get("temperature", 0.7)
