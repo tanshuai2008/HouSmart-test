@@ -243,17 +243,12 @@ class CensusDataService:
     def compare_with_benchmarks(self, local_data, geoid_data):
         """
         Step 3: Compare local results with State Benchmarks.
+        Returns standardized structure: { key: { 'local': val, 'state': val, 'national': val } }
         """
         if not local_data:
             return None
 
-        # Try to find State Name from FIPS or pass it in. 
-        # Geocoder "state_name_ref" might be Block Group name, not State name.
-        # Simple FIPS lookup for state data might be needed if we want to be robust. 
-        # For now, let's look up by FIPS provided in `state_data` if available, or just ignore exact state match if we don't have mapping code.
-        # Actually, `state_data` keys are Names.
-        # We need a FIPS -> Name mapper.
-        
+        # FIPS to Name Mapping
         FIPS_TO_NAME = {
             "01": "Alabama", "02": "Alaska", "04": "Arizona", "05": "Arkansas", "06": "California",
             "08": "Colorado", "09": "Connecticut", "10": "Delaware", "11": "District of Columbia",
@@ -277,66 +272,71 @@ class CensusDataService:
         output = {
             "location_identifiers": geoid_data,
             "metrics": {},
-            "benchmarks": {
-                "state_median_income": benchmarks['state_income'],
-                "national_median_income": benchmarks['us_income'],
-                "state_edu": benchmarks['state_edu'],
-                "state_race": benchmarks['state_race'],
-                "state_age": benchmarks['state_age']
-            }
+            "benchmarks": benchmarks
         }
         
-        # Populate Metrics
-        # Household Income
-        med_income = local_data.get("B19013_001E")
-        output["metrics"]["median_household_income"] = f"${med_income:,}" if med_income else "N/A"
-        
-        # Home Value
-        med_value = local_data.get("B25077_001E")
-        output["metrics"]["median_home_value"] = f"${med_value:,}" if med_value else "N/A"
-        
-        # Rent
-        med_rent = local_data.get("B25064_001E")
-        output["metrics"]["median_gross_rent"] = f"${med_rent:,}" if med_rent else "N/A"
-        
-        # Education Metrics processing
-        total_25_plus = local_data.get("B15003_001E", 0) or 0
-        if total_25_plus > 0:
-            hs = local_data.get("B15003_017E", 0) or 0
-            bach = local_data.get("B15003_022E", 0) or 0
-            mast = local_data.get("B15003_023E", 0) or 0
-            prof = local_data.get("B15003_024E", 0) or 0
-            doct = local_data.get("B15003_025E", 0) or 0
-            
-            # Simplified Logic:
-            # HS+ = HS + (All Higher levels not strictly captured here but this is an MVP) -> This var is ONLY HS Diploma.
-            # We need to ideally sum range 17-25. But for MVP, let's just use what we have. 
-            # Actually, let's just calculate Bachelor+ since that's a key metric.
-            bach_plus = bach + mast + prof + doct
-            output["metrics"]["education_bachelors_pct"] = round((bach_plus / total_25_plus) * 100, 1)
-        else:
-            output["metrics"]["education_bachelors_pct"] = "N/A"
-
-        # Race processing
-        total_pop = local_data.get("B01001_001E", 0) or 0
-        if total_pop > 0:
-            white = local_data.get("B02001_002E", 0) or 0
-            black = local_data.get("B02001_003E", 0) or 0
-            asian = local_data.get("B02001_005E", 0) or 0
-            hisp = local_data.get("B03003_003E", 0) or 0
-            
-            output["metrics"]["race"] = {
-                "White": round((white/total_pop)*100, 1),
-                "Black": round((black/total_pop)*100, 1),
-                "Asian": round((asian/total_pop)*100, 1),
-                "Hispanic": round((hisp/total_pop)*100, 1),
-                "Other": round(100 - ((white+black+asian+hisp)/total_pop)*100, 1)
+        # Helper to structure metric
+        def make_metric(local_val, key_bench=None):
+            return {
+                "local": local_val,
+                "state": benchmarks.get(key_bench, {} if key_bench else 0), # Simplified
+                "national": 0 # Placeholder
             }
         
-        # Age processing (Using Median)
-        med_age = local_data.get("B01002_001E")
-        output["metrics"]["median_age"] = med_age if med_age else "N/A"
+        # 1. Household Income
+        med_income = local_data.get("B19013_001E")
+        output["metrics"]["median_income"] = {"local": med_income if med_income else 0}
         
+        # 2. Home Value
+        med_value = local_data.get("B25077_001E")
+        output["metrics"]["median_home_value"] = {"local": med_value if med_value else 0}
+        
+        # 3. Rent
+        med_rent = local_data.get("B25064_001E")
+        output["metrics"]["median_gross_rent"] = {"local": med_rent if med_rent else 0}
+        
+        # 4. Education (Bachelors+)
+        total_25_plus = local_data.get("B15003_001E", 0) or 0
+        
+        e_hs = 0
+        e_bach = 0
+        e_mast = 0
+        e_prof = 0
+        e_doc = 0
+        
+        if total_25_plus > 0:
+            e_hs = local_data.get("B15003_017E", 0) or 0
+            e_bach = local_data.get("B15003_022E", 0) or 0
+            e_mast = local_data.get("B15003_023E", 0) or 0
+            e_prof = local_data.get("B15003_024E", 0) or 0
+            e_doc = local_data.get("B15003_025E", 0) or 0
+
+        # Pass raw counts so app.py can calculate percentages correctly
+        output["metrics"]["Edu_Total_25_Plus"] = {"local": total_25_plus}
+        output["metrics"]["Edu_HS_Diploma"] = {"local": e_hs}
+        output["metrics"]["Edu_Bachelor"] = {"local": e_bach}
+        output["metrics"]["Edu_Master"] = {"local": e_mast}
+        output["metrics"]["Edu_Prof"] = {"local": e_prof}
+        output["metrics"]["Edu_Doctorate"] = {"local": e_doc}
+
+        # 5. Race
+        r_tot = local_data.get("B01001_001E", 0) or 0
+        r_white = local_data.get("B02001_002E", 0) or 0
+        r_black = local_data.get("B02001_003E", 0) or 0
+        r_asian = local_data.get("B02001_005E", 0) or 0
+        r_hisp = local_data.get("B03003_003E", 0) or 0
+        
+        # Pass raw counts
+        output["metrics"]["Race_White"] = {"local": r_white}
+        output["metrics"]["Race_Black"] = {"local": r_black}
+        output["metrics"]["Race_Asian"] = {"local": r_asian}
+        output["metrics"]["Origin_Hispanic"] = {"local": r_hisp}
+        output["metrics"]["Race_Total"] = {"local": r_tot}
+    
+        # 6. Age
+        med_age = local_data.get("B01002_001E")
+        output["metrics"]["median_age"] = {"local": med_age if med_age else 0}
+    
         return output
 
 def get_census_data(address):

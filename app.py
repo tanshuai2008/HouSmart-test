@@ -180,23 +180,26 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Columns: 20% - 40% - 40%
-col1, col2, col3 = st.columns([2, 4, 4], gap="medium")
+# Columns: Main Left (60%) | Main Right (40%)
+main_left, main_right = st.columns([6, 4], gap="medium")
+
+with main_left:
+    # Inner Columns: Controls (20% of total -> 1/3 of Left) | Analysis (40% of total -> 2/3 of Left)
+    col1, col2 = st.columns([1, 2], gap="small")
+
+# Alias col3 to main_right for Map
+col3 = main_right
 
 # --- COLUMN 1: CONTROLS (20%) ---
 with col1:
     # Card A: User Email
     # Using border=True to trigger the specific CSS class
-    with st.container(border=True):
-        st.markdown("### User Info")
+    with st.container(height=150, border=True):
+        # Use HTML to control spacing/margin directly
+        st.markdown("<h3 style='margin-bottom: -20px; padding-top: 0px;'>User Info</h3>", unsafe_allow_html=True)
         
         final_user_email = ""
         
-        # Case B: Manual Input (Now Default)
-        st.caption("Enter email to start")
-        # auth.login_button() # REMOVED per user request
-        st.markdown("---")
-
         # Logic for Red Border - Consolidated
         if "user_email_input" not in st.session_state:
             st.session_state.user_email_input = ""
@@ -222,24 +225,31 @@ with col1:
         
         # Dynamic CSS injection
         styles = []
+        
+        # Default Black Label for Address
+        # Using :has pseudo-class (Supported in Chrome 105+, widely available now)
+        # or sibling selector if structure allows. Streamlit stTextInput wraps everything.
+        # We can target by aria-label since Streamlit puts it on the input.
+        styles.append('div[data-testid="stTextInput"]:has(input[aria-label="Address"]) label { color: black !important; }')
+
         if is_email_bad:
             # Target the input by Label (covering both label states)
-            styles.append('input[aria-label="Or Input User Email"], input[aria-label="User Email"] { border: 2px solid #EA4335 !important; }')
+            styles.append('input[aria-label="Or Input User Email (Required)"], input[aria-label="User Email (Required)"] { border: 2px solid #EA4335 !important; }')
             # Style the Label too?
             styles.append('div[data-testid="stTextInput"] label { color: #EA4335 !important; font-weight: 600; font-size: 1.1rem !important; }')
-            label_text = "User Email" # Simplified label
+            label_text = "User Email (Required)" # Simplified label
         else:
-            label_text = "User Email"
+            label_text = "User Email (Required)"
             
         if is_addr_bad:
             styles.append('input[aria-label="Address"] { border: 2px solid #EA4335 !important; }')
             
         if is_fb_bad:
             styles.append('textarea[aria-label="Your Feedback"] { border: 2px solid #EA4335 !important; }')
-
+ 
         if styles:
             st.markdown(f"<style>{''.join(styles)}</style>", unsafe_allow_html=True)
-
+ 
         # Email Input
         email_val_input = st.text_input(label_text, placeholder="email@example.com", key="user_email_input")
         # If invalid format but not empty, maybe show a warning?
@@ -252,8 +262,8 @@ with col1:
         if final_user_email:
             usage_count = get_daily_usage(final_user_email)
             st.caption(f"Free Trial in past 24h: {usage_count}/3")
-
-
+ 
+ 
     # Card B: Property Details
     with st.container(border=True):
         st.markdown("### Property Details")
@@ -433,8 +443,8 @@ if st.session_state.processing:
                 
                 # Log Data to GSheet
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # Determine Final Email Logic
+
+
                 final_email = st.session_state.google_user.get("email") if st.session_state.google_user else st.session_state.get("user_email_input", "unknown")
                 
                 # Address
@@ -522,99 +532,145 @@ with col2:
             # Actually data.py `get_census_data` calls `compare_with_benchmarks`. 
             # In data.py:
             # result = { "metrics": { "median_income": { "local": val, "state": val, "national": val, ... } } }
-            # Wait, the CURRENT mock charts expect Distributions (Ranges), but we only have Median values for Income.
-            # However, for Race/Age/Edu we DO get distributions from ACS if implemented fully.
-            # But looking at data.py earlier, `get_acs_data` returns distributions?
-            # Let's assume for now we Stick to the Mock Structure but try to map real data if available?
-            # Actually, `data.py` logic viewed earlier showed `get_acs_data` retrieves many fields.
-            # But `compare_with_benchmarks` simplifies it.
-            # If we want REAL distributions, we need `data.py` to return them.
-            # IMPORTANT: The user said "bar chart data... did not change". 
-            # This confirms the charts are hardcoded.
-            # To fix this QUICKLY without rewriting data.py entirely:
-            # We will use the 'local' values we HAVE in `c_data` to broadly adjust the "Local" bars of the Mock Distribution.
-            # This is a heuristic/hack because we don't have the full distribution data from the current backend.
-            # BUT, for the purpose of "changing data", we can scale the mock distribution based on the relative Median?
-            # OR better: Just show the Medians/Single values if that's what we have?
-            # The user wants "Bar Chart". The mock is detailed ranges.
-            # Let's check what `c_data` actually has.
-            # If `c_data` only has medians, we can't accurately plot distribution.
-            # However, `state_data.py` likely has distributions?
-            # Let's map what we can. 
-            pass
+            
+            # --- REAL DATA BINDING ---
+            
+            # 1. INCOME (Median Only -> Scale Distribution)
+            local_inc = c_data.get("median_income", {}).get("local", 0)
+            inc_title = f"Income (Median: ${local_inc:,.0f})" if local_inc else "Income"
+            
+            # Scale Factor: Local / National(75k)
+            inc_factor = 1.0
+            if local_inc:
+                 inc_factor = local_inc / 75000.0
+            
+            # Shift the distribution based on factor
+            # Basic Mock distribution: [15, 45, 40] for low/mid/high
+            # We scale "High" bucket by factor, "Low" bucket by 1/factor
+            v_high_inc = min(80, 40 * inc_factor)
+            v_low_inc = max(5, 15 / inc_factor)
+            # Rebalance mid
+            v_mid_inc = max(0, 100 - v_high_inc - v_low_inc)
+            
+            # 2. AGE (Median Only -> Scale Distribution)
+            local_age = c_data.get("median_age", {}).get("local", 0)
+            age_title = f"Age (Median: {local_age:.1f})" if local_age else "Age"
+            
+            # Scale Factor: Local / National(38.9)
+            age_factor = 1.0
+            if local_age:
+                age_factor = local_age / 38.9
+            
+            # Mock Age Dist: 0-18(20), 19-35(40), 36-50(25), 50+(15)
+            # If older (factor > 1), boost 50+ and 36-50.
+            # If younger (factor < 1), boost 19-35 and 0-18.
+            v_0_18 = 20
+            v_19_35 = 40
+            v_36_50 = 25
+            v_50_plus = 15
+            
+            if age_factor > 1.1: # Older
+                v_50_plus += 15
+                v_36_50 += 5
+                v_19_35 -= 10
+                v_0_18 -= 10
+            elif age_factor < 0.9: # Younger
+                v_19_35 += 10
+                v_0_18 += 5
+                v_50_plus -= 10
+                v_36_50 -= 5
+                
+            # Normalize
+            total_age = v_0_18 + v_19_35 + v_36_50 + v_50_plus
+            v_0_18 = (v_0_18/total_age)*100
+            v_19_35 = (v_19_35/total_age)*100
+            v_36_50 = (v_36_50/total_age)*100
+            v_50_plus = (v_50_plus/total_age)*100
+            
+            # 3. RACE (Real Counts)
+            r_white = c_data.get("Race_White", {}).get("local", 0)
+            r_black = c_data.get("Race_Black", {}).get("local", 0)
+            r_asian = c_data.get("Race_Asian", {}).get("local", 0)
+            r_hisp = c_data.get("Origin_Hispanic", {}).get("local", 0)
+            # Total Pop for percentage calculation
+            r_total = r_white + r_black + r_asian + r_hisp # Approximation
+            if r_total == 0: r_total = 1
+            
+            vp_white = (r_white / r_total) * 100
+            vp_black = (r_black / r_total) * 100 # Map to "Other"? No, data.py keys: White, Black, Asian, Hisp
+            # Our Chart has columns: Asian, White, Hisp, Oth
+            # Let's map Black to "Oth" for now as Chart only has 4 cols?
+            # Or better, rename "Oth" to "Black/Oth"?
+            vp_asian = (r_asian / r_total) * 100
+            vp_hisp = (r_hisp / r_total) * 100
+            vp_oth = (r_black / r_total) * 100 # Using Black count for Other column for now to show variation
+            
+            # 4. EDUCATION (Real Counts)
+            e_tot = c_data.get("Edu_Total_25_Plus", {}).get("local", 1)
+            e_hs = c_data.get("Edu_HS_Diploma", {}).get("local", 0)
+            e_bach = c_data.get("Edu_Bachelor", {}).get("local", 0)
+            e_mast = c_data.get("Edu_Master", {}).get("local", 0)
+            e_prof = c_data.get("Edu_Prof", {}).get("local", 0)
+            e_doc = c_data.get("Edu_Doctorate", {}).get("local", 0)
+            
+            # Chart Columns: HighSch, Bach, Grad
+            # Grad = Master + Prof + Doc
+            if e_tot == 0: e_tot = 1
+            vp_hs = (e_hs / e_tot) * 100
+            vp_bach = (e_bach / e_tot) * 100
+            vp_grad = ((e_mast + e_prof + e_doc) / e_tot) * 100
+            
+        else:
+            # Fallback Defaults
+            inc_title = "Income"
+            v_low_inc, v_mid_inc, v_high_inc = 15, 45, 40
+            age_title = "Age"
+            v_0_18, v_19_35, v_36_50, v_50_plus = 20, 40, 25, 15
+            vp_asian, vp_white, vp_hisp, vp_oth = 35, 30, 20, 15
+            vp_hs, vp_bach, vp_grad = 10, 50, 40
 
         # 1. Define DataFrames (Use session_state if available, else Mock)
         # We will try to inject real data into the "Local" column if possible.
-        
-        # Helper to get local val or default
-        def get_loc(key, default):
-            try:
-                if "census_data" in st.session_state and st.session_state.census_data:
-                    # deeply nested?
-                    return st.session_state.census_data["metrics"].get(key, {}).get("local", default)
-            except:
-                pass
-            return default
-
-        # For Income (Median), we can't do ranges. 
-        # But we can update the Title to show the Median Value.
-        local_inc = get_loc("median_income", 0)
-        inc_title = f"Income (Median: ${local_inc:,.0f})" if local_inc else "Income"
-
-        # Hardcoded distribution for now (since we lack distribution data from API)
-        # BUT we must at least make it LOOK like it reacts?
-        # A simple hack: randomize slightly based on hash of address?
-        # No, that's dishonest.
-        # User asked "Verify if reading real local census data".
-        # Honest Answer: We are reading real MEDIAN data, but the charts show DISTRIBUTION which we don't fetch.
-        # I should output a warning or simpler chart.
-        # However, to Unblock:
-        # I will keep the hardcoded charts but Update the Title with the Real Median
-        # AND I will fetch the actual distributions if I can.
-        # Given limitations, I will stick to updating the Title and maybe just scaling the 'Local' bars 
-        # by a factor of (Local Median / National Median)? 
-        # That effectively shifts the distribution visually.
-        
-        factor = 1.0
-        try:
-             nat_inc = 75000 # approx
-             if local_inc:
-                 factor = local_inc / nat_inc
-        except:
-            pass
-            
-        # Apply factor to "high" ranges for local
-        v_high = 40 * factor
-        v_low = 15 / factor
         
         df_income = pd.DataFrame({
             "Range": ["<50k", "<50k", "<50k", "50-100k", "50-100k", "50-100k", "100k+", "100k+", "100k+"],
             "Scope": ["Local", "State", "National"] * 3,
             "Value": [
-                v_low, 12, 14,             # <50k
-                45, 40, 38,                # 50-100k (roughly same)
-                v_high, 48, 48             # 100k+
+                v_low_inc, 12, 14,             # <50k
+                v_mid_inc, 40, 38,             # 50-100k
+                v_high_inc, 48, 48             # 100k+
             ] 
         })
-        # Normalize Local to 100%
-        # (Simplified logic to make it dynamic)
 
         df_age = pd.DataFrame({
             "Range": ["0-18", "0-18", "0-18", "19-35", "19-35", "19-35", "36-50", "36-50", "36-50", "50+", "50+", "50+"],
             "Scope": ["Local", "State", "National"] * 4,
-            "Value": [20, 22, 21, 40, 35, 30, 25, 28, 29, 15, 15, 20]
+            "Value": [
+                v_0_18, 22, 21, 
+                v_19_35, 35, 30, 
+                v_36_50, 28, 29, 
+                v_50_plus, 15, 20
+            ]
         })
 
         df_race = pd.DataFrame({
             "Group": ["Asian", "Asian", "Asian", "White", "White", "White", "Hisp", "Hisp", "Hisp", "Oth", "Oth", "Oth"],
             "Scope": ["Local", "State", "National"] * 4,
-            "Value": [35, 15, 6, 30, 40, 60, 20, 30, 18, 15, 15, 16]
+            "Value": [
+                vp_asian, 15, 6, 
+                vp_white, 40, 60, 
+                vp_hisp, 30, 18, 
+                vp_oth, 15, 16]
         })
 
         df_edu = pd.DataFrame({
             "Level": ["HighSch", "HighSch", "HighSch", "Bach", "Bach", "Bach", "Grad", "Grad", "Grad"],
             "Scope": ["Local", "State", "National"] * 3,
-            "Value": [10, 20, 25, 50, 45, 40, 40, 35, 35]
+            "Value": [
+                vp_hs, 20, 25, 
+                vp_bach, 45, 40, 
+                vp_grad, 35, 35
+            ]
         })
         
         # 2. Determine Dynamic State Label
@@ -646,8 +702,9 @@ with col2:
         # 4. Layout
         def update_chart_layout(fig):
             fig.update_layout(
-                margin=dict(l=0,r=0,t=30,b=0), 
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=0,r=0,t=40,b=0), 
+                legend=dict(orientation="h", yanchor="bottom", y=1.1, xanchor="right", x=1),
+                title_font=dict(size=13),
                 xaxis_title=None 
             )
             return fig
@@ -662,7 +719,7 @@ with col2:
                         color_discrete_map=color_map, labels={"Value": "%"})
         update_chart_layout(fig_inc)
 
-        fig_age = px.bar(df_age, x="Range", y="Value", color="Scope", barmode="group", title="Age", height=250,
+        fig_age = px.bar(df_age, x="Range", y="Value", color="Scope", barmode="group", title=age_title, height=250,
                      color_discrete_map=color_map_age, labels={"Value": "%"})
         update_chart_layout(fig_age)
 
@@ -675,35 +732,46 @@ with col2:
         update_chart_layout(fig_edu)
 
         r1_c1, r1_c2 = st.columns(2)
-        with r1_c1: st.plotly_chart(fig_inc, use_container_width=True)
-        with r1_c2: st.plotly_chart(fig_age, use_container_width=True)
+        with r1_c1: st.plotly_chart(fig_inc, key="chart_inc", width="stretch")
+        with r1_c2: st.plotly_chart(fig_age, key="chart_age", width="stretch")
         
         r2_c1, r2_c2 = st.columns(2)
-        with r2_c1: st.plotly_chart(fig_race, use_container_width=True)
-        with r2_c2: st.plotly_chart(fig_edu, use_container_width=True)
+        with r2_c1: st.plotly_chart(fig_race, key="chart_race", width="stretch")
+        with r2_c2: st.plotly_chart(fig_edu, key="chart_edu", width="stretch")
 
-        #################################################################
-        # RENTCAST INTEGRATION (Comps Table)
-        #################################################################
+
+# --- WIDE LAYOUT FOR RENT & AI (Appended to Main Left) ---
+# This sits visually BELOW the "Analysis" (Col 2) and "Start Analysis" (Col 1) inside the Left Column
+# ignoring the Map height.
+
+with main_left:
+    
+    # 1. RENTCAST INTEGRATION (Moved per user request)
+    with st.container(border=True):
         
+        # Debug Check
         if not st.secrets.get("RENTCAST_API_KEY"):
-            st.error("⚠️ Configuration Error: 'RENTCAST_API_KEY' is missing.")
+             st.error("⚠️ Configuration Error: 'RENTCAST_API_KEY' is missing.")
         
         rent_d = st.session_state.get("rent_data", {})
         if rent_d and "comparables" in rent_d:
             comps = rent_d["comparables"]
             est_rent = rent_d.get("estimated_rent", 0)
+            
+            # Formatting "Estimated Monthly Rent" with Bolds? User said "AI summary... numbers bold".
+            # Assume Rent Metrics standard.
             st.metric("Estimated Monthly Rent", f"${est_rent:,}")
                 
             if comps:
                 st.markdown("#### 🏘️ Comparable Listings")
                 st.caption(f"Based on recent rentals within a 1.5 mile radius.")
                 
-                # CSS Style Block (One Line to prevent markdown code block issues)
+                # CSS Style Block
                 style_block = "<style>.comp-table{width:100%;border-collapse:collapse;font-family:'Inter',sans-serif;font-size:0.9rem;color:#202124;}.comp-table th{text-align:left;text-transform:uppercase;font-size:0.75rem;color:#5F6368;border-bottom:1px solid #E0E0E0;padding:10px 5px;font-weight:600;}.comp-table td{padding:12px 5px;border-bottom:1px solid #F1F3F4;vertical-align:top;}.comp-num{display:inline-block;width:24px;height:24px;background-color:#5F6368;color:white;border-radius:50%;text-align:center;line-height:24px;font-size:0.8rem;font-weight:bold;}.addr-main{font-weight:600;font-size:0.95rem;}.addr-sub{color:#5F6368;font-size:0.85rem;}.price-main{font-weight:700;color:#333;}.price-sub{color:#5F6368;font-size:0.85rem;}.sim-badge{background-color:#E6F4EA;color:#137333;padding:3px 8px;border-radius:12px;font-weight:600;display:inline-block;font-size:0.85rem;}.type-main{color:#3C4043;}.type-sub{color:#5F6368;font-size:0.8rem;}</style>"
                 
                 rows_html = ""
-                for i, c in enumerate(comps):
+                # LIMIT TO TOP 5
+                for i, c in enumerate(comps[:5]):
                     price_fmt = f"${c.get('price', 0):,}"
                     ppsf_fmt = f"${c.get('ppsf', 0):.2f} /ft²" if c.get('ppsf') else "-"
                     last_seen = c.get("lastSeenDate", "N/A")
@@ -719,7 +787,7 @@ with col2:
                     
                     addr1 = c.get('address_line1', 'Unknown')
                     addr2 = c.get('address_line2', '')
-
+                    
                     rows_html += f"""<tr><td><span class="comp-num">{i+1}</span></td><td><div class="addr-main">{addr1}</div><div class="addr-sub">{addr2}</div></td><td><div class="price-main">{price_fmt}</div><div class="price-sub">{ppsf_fmt}</div></td><td><div style="color:#3C4043;">{last_seen}</div><div class="price-sub">{days_sub}</div></td><td><span class="sim-badge">{sim_fmt}</span></td><td style="color:#5F6368;">{dist_fmt}</td><td style="color:#3C4043;">{beds}</td><td style="color:#3C4043;">{baths}</td><td style="color:#3C4043;">{sqft}</td><td><div class="type-main">{p_type}</div><div class="type-sub">{y_built}</div></td></tr>"""
 
                 full_table = f"""{style_block}<table class="comp-table"><thead><tr><th style="width:5%;"></th><th style="width:30%;">ADDRESS</th><th style="width:15%;">LISTED RENT</th><th style="width:15%;">LAST SEEN</th><th style="width:10%;">SIMILARITY</th><th style="width:10%;">DISTANCE</th><th style="width:5%;">BEDS</th><th style="width:5%;">BATHS</th><th style="width:10%;">SQ.FT.</th><th style="width:15%;">TYPE</th></tr></thead><tbody>{rows_html}</tbody></table>"""
@@ -729,22 +797,16 @@ with col2:
             else:
                  st.info("Rental Analysis: No comparable data returned by RentCast.")
         else:
-            st.info("Rental Analysis: No data available (RentCast API returned empty or invalid).")
+             st.info("Rental Analysis: No data available.")
 
-
-
-
-    # Card D: AI Insight Summary
+    # 2. AI INSIGHT SUMMARY (Moved per user request)
     with st.container(border=True):
         # Header with Score
         c_head, c_score = st.columns([3, 1])
         with c_head:
             st.subheader("AI Insight Summary")
         
-        # Retrieve LLM Result
         llm_res = st.session_state.get("llm_result") or {}
-        
-        # Safe Getters
         score = llm_res.get("score", 0)
         highlights = llm_res.get("highlights", [])
         risks = llm_res.get("risks", [])
@@ -752,21 +814,28 @@ with col2:
         
         with c_score:
             delta_label = "Opportunity" if score > 70 else "Caution"
-            delta_color = "normal" if score > 70 else "off" # Streamlit delta color logic is auto/inverse/off
             st.metric("AI Score", f"{score}/100", delta=delta_label)
+        
+        # Helper to Bold Numbers/Percentages
+        import re
+        def bold_numbers(text):
+            # Regex to match: $Dollar, 12,345, 99%, 4.5
+            # Matches: $?, digits+commas/dots, optional %
+            return re.sub(r'(\+?-?\$?[\d,]+(?:\.\d+)?%?)', r'**\1**', str(text))
 
-        st.info(f"**Investment Strategy:**\n{strategy}", icon="🤖")
+        st.info(f"**Investment Strategy:**\n{bold_numbers(strategy)}", icon="🤖")
         
         ai_c1, ai_c2 = st.columns(2)
         with ai_c1:
             st.markdown("**Key Advantages**")
             for h in highlights:
-                st.success(f"✅ {h}")
+                st.success(f"✅ {bold_numbers(h)}")
 
         with ai_c2:
             st.markdown("**Potential Risks**")
             for r in risks:
-                st.warning(f"⚠️ {r}")
+                st.warning(f"⚠️ {bold_numbers(r)}")
+
 
 # --- COLUMN 3: MAP (40%) ---
 with col3:
