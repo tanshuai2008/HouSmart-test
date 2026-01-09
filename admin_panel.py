@@ -41,6 +41,37 @@ with st.form("settings_form"):
         help="Higher values mean more creative/random responses."
     )
 
+    st.subheader("🔌 API Management")
+    st.caption("Enable or disable external API calls. Disabling APIs will limit functionality.")
+    
+    col_api1, col_api2 = st.columns(2)
+    
+    with col_api1:
+        enable_geoapify = st.toggle(
+            "Enable Geoapify (Maps/POI)",
+            value=config.get("enable_geoapify", True),
+            help="Required for geocoding addresses and finding nearby places."
+        )
+        
+        enable_rentcast = st.toggle(
+            "Enable RentCast (Rentals)",
+            value=config.get("enable_rentcast", True),
+            help="Fetches rental estimates and comparables."
+        )
+
+    with col_api2:
+        enable_census = st.toggle(
+            "Enable Census API",
+            value=config.get("enable_census", True),
+            help="Fetches demographic data (Income, Age, etc.)."
+        )
+        
+        enable_llm = st.toggle(
+            "Enable Gemini AI (LLM)",
+            value=config.get("enable_llm", True),
+            help="Generates the AI score and investment analysis."
+        )
+
     st.subheader("🛠️ Feature Flags")
     
     customized_scoring_method = st.toggle(
@@ -92,7 +123,11 @@ with st.form("settings_form"):
             "customized_scoring_method": customized_scoring_method,
             "cache_ttl_hours": cache_ttl,
             "enable_daily_limit": enable_daily_limit,
-            "whitelist_emails": final_whitelist
+            "whitelist_emails": final_whitelist,
+            "enable_geoapify": enable_geoapify,
+            "enable_rentcast": enable_rentcast,
+            "enable_census": enable_census,
+            "enable_llm": enable_llm
         }
         
         if config_manager.save_config(new_config):

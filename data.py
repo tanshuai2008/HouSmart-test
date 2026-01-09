@@ -1,7 +1,9 @@
 import requests
 import urllib.parse
 import random
+import datetime
 import state_data
+from config_manager import config_manager
 
 def log_debug(msg):
 
@@ -18,6 +20,10 @@ def get_coordinates(address, api_key):
     """
     Get coordinates for an address using Geoapify Geocoding API.
     """
+    if not config_manager.get_config().get("enable_geoapify", True):
+        # Return default if disabled
+        return 40.785091, -73.968285
+
     if not api_key:
         return 40.785091, -73.968285
 
@@ -36,11 +42,19 @@ def get_coordinates(address, api_key):
         
     return 40.785091, -73.968285
 
-def get_poi(address, api_key=None):
+def get_poi(address, api_key=None, lat=None, lon=None):
     """
     Fetch POIs around the address using Geoapify Places API.
     """
-    lat, lon = get_coordinates(address, api_key)
+    if not config_manager.get_config().get("enable_geoapify", True):
+        # Return only coords (default) and empty POIs
+        if lat is None or lon is None:
+            lat, lon = get_coordinates(address, api_key)
+        return [], lat, lon
+
+    if lat is None or lon is None:
+        lat, lon = get_coordinates(address, api_key)
+
     pois = []
 
     if api_key:
@@ -331,6 +345,10 @@ def get_census_data(address):
     """
     log_debug(f"Starting Census Fetch for: {address}")
     try:
+        if not config_manager.get_config().get("enable_census", True):
+            log_debug("Census API Disabled in Config")
+            return None
+
         service = CensusDataService()
         
         # 1. Geocode
@@ -360,6 +378,9 @@ def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key
     """
     Fetch Rent Estimates and Comparables from RentCast API.
     """
+    if not config_manager.get_config().get("enable_rentcast", True):
+        return None
+
     if not api_key:
         return None
 
@@ -397,13 +418,56 @@ def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key
             top_3 = []
             top_3 = []
             for c in comps[:3]:
+                # Safe conversions
+                price = c.get("price") or 0
+                sqft = c.get("squareFootage") or 0
+                
+                # Calc Price per Sqft
+                ppsf = 0
+                if sqft > 0 and price > 0:
+                    ppsf = round(price / sqft, 2)
+                    
+                # Last Seen (Days Ago)
+                # Input format usually: "2023-10-27T..." or similar. 
+                # Be robust.
+                last_seen_date = c.get("lastSeen", "")
+                days_old = "N/A"
+                if last_seen_date:
+                    try:
+                        # Simple parse if ISO-ish
+                        # RentCast often returns 'YYYY-MM-DD...'
+                        dt = datetime.datetime.fromisoformat(last_seen_date.replace("Z", "+00:00"))
+                        # Just use naive comparison roughly
+                        diff = datetime.datetime.now(dt.tzinfo) - dt
+                        days_old = diff.days
+                    except:
+                        pass
+                
+                # Address parts
+                addr_full = c.get("formattedAddress", "Unknown")
+                # Try to split for display (Street \n City, Zip)
+                addr_line1 = c.get("addressLine1", addr_full.split(",")[0])
+                addr_line2 = c.get("addressLine2", "")
+                if not addr_line2 and "," in addr_full:
+                    # simplistic fallback
+                    parts = addr_full.split(",")
+                    if len(parts) > 1:
+                        addr_line2 = ",".join(parts[1:]).strip()
+
                 top_3.append({
-                    "address": c.get("formattedAddress"),
-                    "price": c.get("price"),
-                    "similarity": c.get("similarityScore"),
+                    "address_line1": addr_line1,
+                    "address_line2": addr_line2,
+                    "price": price,
+                    "ppsf": ppsf,
+                    "similarity": c.get("similarityScore", 0) or 0, # Could be None
                     "bedrooms": c.get("bedrooms"),
                     "bathrooms": c.get("bathrooms"),
-                    "squareFootage": c.get("squareFootage")
+                    "squareFootage": sqft,
+                    "distance": c.get("distance", 0), # Miles
+                    "lastSeenDate": last_seen_date[:10] if last_seen_date else "N/A",
+                    "daysOld": days_old,
+                    "propertyType": c.get("propertyType", "Unknown"),
+                    "yearBuilt": c.get("yearBuilt", "")
                 })
                 
             return {

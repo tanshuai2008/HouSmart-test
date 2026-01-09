@@ -225,6 +225,16 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
     # 1.5 Get Config
     config = config_manager.get_config()
     
+    # CHECK ENABLE FLAG
+    if not config.get("enable_llm", True):
+        return {
+            "highlights": ["AI Analysis is currently disabled by Admin."],
+            "risks": [],
+            "score": 0,
+            "investment_strategy": "Feature disabled.",
+            "estimated_census": {"metrics": {}}
+        }
+
     # Priority: Function Arg > Config > Default
     # But for "Dynamic Config" requirement, if user didn't explicitly pass a model (passed default), we should prefer config.
     # The default arg is 'models/gemini-1.5-flash'. If caller passed anything else, respect it.

@@ -192,72 +192,61 @@ with col1:
         
         final_user_email = ""
         
-        # Case A: Google Logged In
-        if st.session_state.google_user:
-            google_email = st.session_state.google_user.get("email")
-            st.success(f"✅ Signed in as: **{google_email}**")
-            final_user_email = google_email
-            
-            if st.button("Sign Out"):
-                st.session_state.google_user = None
-                st.rerun()
-                
-        # Case B: Manual Input
-        else:
-            st.caption("Sign in for a better experience")
-            auth.login_button()
-            st.markdown("---")
-    
-            # Logic for Red Border - Consolidated
-            if "user_email_input" not in st.session_state:
-                st.session_state.user_email_input = ""
-            
-            # Regex Validation
-            email_val = st.session_state.user_email_input.strip()
-            # Basic email pattern
-            email_pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
-            is_email_valid = re.match(email_pattern, email_val) is not None
-            is_email_empty = not email_val
-            
-            # Determine if we show red border (Empty OR Invalid)
-            is_email_bad = is_email_empty or not is_email_valid
-            
-            # Determine Address Status (Check session state or default)
-            addr_val = st.session_state.get("address_input", "").strip()
-            # Note: Default value in widget is "123 Market..." so it might not be empty initially unless user clears it.
-            is_addr_bad = not addr_val
-            
-            # Determine Feedback Status
-            fb_val = st.session_state.get("feedback_input", "").strip()
-            is_fb_bad = not fb_val
-            
-            # Dynamic CSS injection
-            styles = []
-            if is_email_bad:
-                # Target the input by Label (covering both label states)
-                styles.append('input[aria-label="Or Input User Email"], input[aria-label="User Email"] { border: 2px solid #EA4335 !important; }')
-                # Style the Label too?
-                styles.append('div[data-testid="stTextInput"] label { color: #EA4335 !important; font-weight: 600; font-size: 1.1rem !important; }')
-                label_text = "Or Input User Email"
-            else:
-                label_text = "User Email"
-                
-            if is_addr_bad:
-                styles.append('input[aria-label="Address"] { border: 2px solid #EA4335 !important; }')
-                
-            if is_fb_bad:
-                styles.append('textarea[aria-label="Your Feedback"] { border: 2px solid #EA4335 !important; }')
+        # Case B: Manual Input (Now Default)
+        st.caption("Enter email to start")
+        # auth.login_button() # REMOVED per user request
+        st.markdown("---")
 
-            if styles:
-                st.markdown(f"<style>{''.join(styles)}</style>", unsafe_allow_html=True)
-    
-            # Email Input
-            email_val_input = st.text_input(label_text, placeholder="email@example.com", key="user_email_input")
-            # If invalid format but not empty, maybe show a warning?
-            if email_val and not is_email_valid:
-                st.caption("⚠️ Please enter a valid email address.")
-                
-            final_user_email = email_val_input
+        # Logic for Red Border - Consolidated
+        if "user_email_input" not in st.session_state:
+            st.session_state.user_email_input = ""
+        
+        # Regex Validation
+        email_val = st.session_state.user_email_input.strip()
+        # Basic email pattern
+        email_pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+        is_email_valid = re.match(email_pattern, email_val) is not None
+        is_email_empty = not email_val
+        
+        # Determine if we show red border (Empty OR Invalid)
+        is_email_bad = is_email_empty or not is_email_valid
+        
+        # Determine Address Status (Check session state or default)
+        addr_val = st.session_state.get("address_input", "").strip()
+        # Note: Default value in widget is "123 Market..." so it might not be empty initially unless user clears it.
+        is_addr_bad = not addr_val
+        
+        # Determine Feedback Status
+        fb_val = st.session_state.get("feedback_input", "").strip()
+        is_fb_bad = not fb_val
+        
+        # Dynamic CSS injection
+        styles = []
+        if is_email_bad:
+            # Target the input by Label (covering both label states)
+            styles.append('input[aria-label="Or Input User Email"], input[aria-label="User Email"] { border: 2px solid #EA4335 !important; }')
+            # Style the Label too?
+            styles.append('div[data-testid="stTextInput"] label { color: #EA4335 !important; font-weight: 600; font-size: 1.1rem !important; }')
+            label_text = "User Email" # Simplified label
+        else:
+            label_text = "User Email"
+            
+        if is_addr_bad:
+            styles.append('input[aria-label="Address"] { border: 2px solid #EA4335 !important; }')
+            
+        if is_fb_bad:
+            styles.append('textarea[aria-label="Your Feedback"] { border: 2px solid #EA4335 !important; }')
+
+        if styles:
+            st.markdown(f"<style>{''.join(styles)}</style>", unsafe_allow_html=True)
+
+        # Email Input
+        email_val_input = st.text_input(label_text, placeholder="email@example.com", key="user_email_input")
+        # If invalid format but not empty, maybe show a warning?
+        if email_val and not is_email_valid:
+            st.caption("⚠️ Please enter a valid email address.")
+            
+        final_user_email = email_val_input
         
         # Display Usage Count (Works for both)
         if final_user_email:
@@ -359,29 +348,33 @@ if st.session_state.processing:
         geo_key = st.secrets.get("GEOAPIFY_API_KEY")
         rentcast_key = st.secrets.get("RENTCAST_API_KEY")
         
+        # API Counters
+        count_geoapify = 0
+        count_rentcast = 0
+        count_census = 0
+        count_gemini = 0
+        
         # 1. Geocode
         addr_to_geocode = st.session_state.get("address_input", "123 Market St, San Francisco, CA")
         lat, lon = data.get_coordinates(addr_to_geocode, geo_key)
+        count_geoapify += 1 # Geocoding Call
         st.session_state.map_center = (lat, lon)
         
-        # 2. POIS
-        pois, _, _ = data.get_poi(addr_to_geocode, geo_key)
+        # 2. POIS (Optimized: Pass lat/lon)
+        pois, _, _ = data.get_poi(addr_to_geocode, geo_key, lat=lat, lon=lon)
+        count_geoapify += 1 # POI Call
         st.session_state.poi_data = pois # Persist
         
         # 3. Census
         census_data = data.get_census_data(addr_to_geocode)
+        if census_data: # If None, call failed or disabled
+             count_census += 2 # 1 Geocode + 1 Data
         st.session_state.census_data = census_data # Persist
         
         # 4. RentCast
-        # Need params
-        # bedrooms etc are widget keys. But widgets above didn't have keys in st.number_input?
-        # I added keys? Nop.
-        # Let's try to get values from args or defaults.
-        # Ideally, I should have added keys to the widgets in Card B.
-        # For now, I will default to 2b 2b 1200sqft if I can't access.
-        # Actually I can't easy access widget state if I didn't assign keys.
-        # Let's assume standard params for now or update Card B later.
         rent_data = data.get_rentcast_data(addr_to_geocode, 2, 2, 1200, "Single Family", rentcast_key)
+        if rent_data:
+            count_rentcast += 1
         st.session_state.rent_data = rent_data
         
         # 5. LLM Analysis
@@ -395,23 +388,50 @@ if st.session_state.processing:
             weights=weights,
             user_prefs=user_prefs_text
         )
+        # Check if actually called (not disabled message)
+        if "AI Analysis is currently disabled" not in str(llm_result.get("highlights", [])):
+             count_gemini += 1
+             
         st.session_state.llm_result = llm_result
             
             # --- DATA INTEGRATION COMPLETE ---
         # --- LOGGING ---
         try:
+            # 1. Google Sheet Logging
             sheet = connect_to_gsheet()
             if sheet:
                 # Check/Add Headers
-                headers = ["Timestamp", "Email", "Address", "PromptTokens", "CompletionTokens", "TotalTokens", "EstimatedRPM"]
-                first_row = sheet.row_values(1)
+                headers = [
+                    "Timestamp", "Email", "Address", 
+                    "PromptTokens", "CompletionTokens", "TotalTokens", "EstimatedRPM",
+                    "GeoapifyCalls", "RentCastCalls", "CensusCalls", "GeminiCalls"
+                ]
+                try:
+                    first_row = sheet.row_values(1)
+                except:
+                    first_row = []
+
                 if not first_row:
                     sheet.append_row(headers)
                 elif first_row != headers:
-                    # Optional: Update headers if strictly required, but safer to append or ignore
-                    pass
+                    # If Row 1 is data (doesn't start with "Timestamp"), insert headers.
+                    # Or if headers mismatch (old version), insert new headers at top and push old down?
+                    # Or just try to append? 
+                    # User asked for new columns. 
+                    # If existing header exists but is short, we should probably APPEND columns?
+                    # But verifying "Timestamp" is safer.
+                    if not (first_row and str(first_row[0]) == "Timestamp"):
+                        sheet.insert_row(headers, index=1)
+                    elif len(first_row) < len(headers):
+                         # Update header row if it's missing new columns
+                         # We can just overwrite the first row with new headers
+                         # But need to check if existing columns align. 
+                         # Assuming we are just appending new metrics to the end.
+                         # Let's just update the first row.
+                         sheet.update(range_name="A1:K1", values=[headers])
+
                 
-                # Log Data
+                # Log Data to GSheet
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
                 # Determine Final Email Logic
@@ -426,7 +446,26 @@ if st.session_state.processing:
                 t_tok = 0
                 est_rpm = 0.0
                 
-                sheet.append_row([ts, final_email, addr, p_tok, c_tok, t_tok, est_rpm])
+                sheet.append_row([
+                    ts, final_email, addr, 
+                    p_tok, c_tok, t_tok, est_rpm,
+                    count_geoapify, count_rentcast, count_census, count_gemini
+                ])
+            
+            # 2. Local CSV Logging (Critical for Daily Limit)
+            log_dir = "logs"
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+            
+            log_file = os.path.join(log_dir, "usage_logs.csv")
+            
+            # Data for local log (Timestamp, Email, Address) - Minimal needed for limit
+            # Ensuring TS and Email are first two cols as expected by get_daily_usage
+            local_row = [ts, final_email, addr]
+            
+            with open(log_file, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(local_row)
                 
         except Exception as e:
             print(f"Logging Error: {e}")
@@ -582,49 +621,142 @@ with col2:
                 # Rows: Comp 1, Comp 2, Comp 3
                 # Cols: Bed #, Bath #, Sqft
                 
-                table_data = []
-                index_labels = []
-                chart_labels = []
-                chart_values = []
+            if comps:
+                st.markdown("#### 🏘️ Comparable Listings")
+                st.caption(f"Based on recent rentals within a 1.5 mile radius.")
+                
+                # CUSTOM HTML/CSS TABLE TO MATCH DESIGN
+                # Using HTML to get double-line rows (Address Line 1 / 2) and Similarity badges
+                
+                table_html = """
+                <style>
+                    .comp-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        font-family: 'Inter', sans-serif;
+                        font-size: 0.9rem;
+                        color: #202124;
+                    }
+                    .comp-table th {
+                        text-align: left;
+                        text-transform: uppercase;
+                        font-size: 0.75rem;
+                        color: #5F6368;
+                        border-bottom: 1px solid #E0E0E0;
+                        padding: 10px 5px;
+                        font-weight: 600;
+                    }
+                    .comp-table td {
+                        padding: 12px 5px;
+                        border-bottom: 1px solid #F1F3F4;
+                        vertical-align: top;
+                    }
+                    .comp-num {
+                        display: inline-block;
+                        width: 24px; 
+                        height: 24px; 
+                        background-color: #5F6368; 
+                        color: white; 
+                        border-radius: 50%; 
+                        text-align: center; 
+                        line-height: 24px; 
+                        font-size: 0.8rem;
+                        font-weight: bold;
+                    }
+                    .addr-main { font-weight: 600; font-size: 0.95rem; }
+                    .addr-sub { color: #5F6368; font-size: 0.85rem; }
+                    .price-main { font-weight: 700; color: #333; }
+                    .price-sub { color: #5F6368; font-size: 0.85rem; }
+                    .sim-badge {
+                        background-color: #E6F4EA; 
+                        color: #137333; 
+                        padding: 3px 8px; 
+                        border-radius: 12px; 
+                        font-weight: 600; 
+                        font-size: 0.85rem;
+                        display: inline-block;
+                    }
+                    .type-main { color: #3C4043; }
+                    .type-sub { color: #5F6368; font-size: 0.8rem; }
+                    
+                </style>
+                <table class="comp-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;"></th>
+                            <th style="width: 30%;">ADDRESS</th>
+                            <th style="width: 15%;">LISTED RENT</th>
+                            <th style="width: 15%;">LAST SEEN</th>
+                            <th style="width: 10%;">SIMILARITY</th>
+                            <th style="width: 10%;">DISTANCE</th>
+                            <th style="width: 5%;">BEDS</th>
+                            <th style="width: 5%;">BATHS</th>
+                            <th style="width: 10%;">SQ.FT.</th>
+                            <th style="width: 15%;">TYPE</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                """
                 
                 for i, c in enumerate(comps):
-                    label = f"Comp {i+1}"
-                    index_labels.append(label)
+                    # Data preparation logic (moved from data.py or kept if robust there)
+                    # We updated data.py to return clean dicts.
                     
-                    # Ensure values are present (handle None)
-                    bed = c.get("bedrooms", "N/A")
-                    bath = c.get("bathrooms", "N/A")
-                    sqft = c.get("squareFootage", "N/A")
-                    price = c.get("price", 0)
+                    # Formatting values
+                    price_fmt = f"${c.get('price', 0):,}"
+                    ppsf_fmt = f"${c.get('ppsf', 0):.2f} /ft²" if c.get('ppsf') else "-"
                     
-                    table_data.append([bed, bath, sqft])
+                    last_seen_str = c.get("lastSeenDate", "N/A")
+                    days_old = c.get("daysOld", "N/A")
+                    seen_sub = f"{days_old} Days Ago" if days_old != "N/A" else ""
                     
-                    chart_labels.append(label)
-                    chart_values.append(price)
+                    sim_score = c.get("similarity", 0)
+                    sim_fmt = f"{sim_score}%"
+                    
+                    dist_fmt = f"{c.get('distance', 0):.2f} mi"
+                    
+                    beds = c.get('bedrooms', '-')
+                    baths = c.get('bathrooms', '-')
+                    sqft = f"{c.get('squareFootage', 0):,}"
+                    
+                    p_type = c.get('propertyType', 'Single Family')
+                    y_built = f"Built {c.get('yearBuilt')}" if c.get('yearBuilt') else ""
+                    
+                    row_html = f"""
+                        <tr>
+                            <td><span class="comp-num">{i+1}</span></td>
+                            <td>
+                                <div class="addr-main">{c.get('address_line1', 'Unknown')}</div>
+                                <div class="addr-sub">{c.get('address_line2', '')} <a href="#" style="text-decoration:none; color:#1A73E8;">↗</a></div>
+                            </td>
+                            <td>
+                                <div class="price-main">{price_fmt}</div>
+                                <div class="price-sub">{ppsf_fmt}</div>
+                            </td>
+                            <td>
+                                <div style="color:#3C4043;">{last_seen_str}</div>
+                                <div class="price-sub">{seen_sub}</div>
+                            </td>
+                            <td>
+                                <span class="sim-badge">{sim_fmt}</span>
+                            </td>
+                            <td style="color:#5F6368;">{dist_fmt}</td>
+                            <td style="color:#3C4043;">{beds}</td>
+                            <td style="color:#3C4043;">{baths}</td>
+                            <td style="color:#3C4043;">{sqft}</td>
+                            <td>
+                                <div class="type-main">{p_type}</div>
+                                <div class="type-sub">{y_built}</div>
+                            </td>
+                        </tr>
+                    """
+                    table_html += row_html
+                    
+                table_html += "</tbody></table>"
+                
+                # Render Table
+                st.markdown(table_html, unsafe_allow_html=True)
 
-                # Create DataFrame
-                df_comps = pd.DataFrame(table_data, columns=["Bed #", "Bath #", "Sqft"], index=index_labels)
-                
-                # Metric Display: Estimated Rent
-                est_rent = rent_d.get("estimated_rent", 0)
-                st.metric("Estimated Monthly Rent", f"${est_rent:,}")
-                
-                # 2. Display Table
-                st.table(df_comps)
-                
-                # 3. Comparables Chart
-                fig_rent = px.bar(
-                    x=chart_labels, 
-                    y=chart_values, 
-                    title="Comparable Rental Estimates ($)",
-                    labels={"x": "Property", "y": "Rent ($)"},
-                    text_auto='.2s',
-                    height=250
-                )
-                fig_rent.update_traces(marker_color='#34A853', textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
-                fig_rent.update_layout(margin=dict(l=0,r=0,t=30,b=0), yaxis_title=None)
-                
-                st.plotly_chart(fig_rent, use_container_width=True)
             else:
                  st.info("Rental Analysis: No comparable data returned by RentCast.")
         else:

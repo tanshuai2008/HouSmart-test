@@ -11,7 +11,11 @@ DEFAULT_CONFIG = {
     "customized_scoring_method": False,
     "cache_ttl_hours": 240,
     "enable_daily_limit": True,
-    "whitelist_emails": []
+    "whitelist_emails": [],
+    "enable_geoapify": True,
+    "enable_rentcast": True,
+    "enable_census": True,
+    "enable_llm": True
 }
 
 class ConfigManager:
