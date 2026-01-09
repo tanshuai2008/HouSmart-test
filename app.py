@@ -543,12 +543,27 @@ with col2:
         state_label = "State"
         try:
             addr_input = st.session_state.get("address_input", "")
-            if "," in addr_input:
-                parts = addr_input.split(",")
-                state_part = parts[-1].strip().split(" ")[0] # "CA" or "CA 94103" -> "CA"
-                state_label = f"{state_part} State"
+            # Robust State Extraction: Look for 2 uppercase letters before the zip code
+            import re
+            # Regex patterns for standard US address format: ... City, ST Zip or ... City, ST
+            match = re.search(r'\b([A-Z]{2})\b\s+\d{5}', addr_input)
+            if match:
+                state_label = f"{match.group(1)} State"
+            else:
+                # Fallback: try just finding last 2-letter word if valid US state
+                # List of US states would be ideal, but simplistic allow for now
+                parts = [p.strip() for p in addr_input.split(",")]
+                if len(parts) >= 2:
+                    # Check the part before zip or the last part
+                    # standard: "Street, City, ST 12345" -> parts[-1] is "ST 12345"
+                    last_chunk = parts[-1]
+                    sub_parts = last_chunk.split()
+                    for sp in sub_parts:
+                         if len(sp) == 2 and sp.isalpha() and sp.isupper():
+                             state_label = f"{sp} State"
+                             break
         except:
-            pass
+             pass
 
         # 3. Update all DataFrames
         df_income["Scope"] = df_income["Scope"].replace("State", state_label)
@@ -614,89 +629,89 @@ with col2:
         if rent_d and "comparables" in rent_d:
             comps = rent_d["comparables"] # List of dicts
             
-            if comps:
-                st.markdown("#### 🏘️ Rental Comparables")
-                
-                # 1. Prepare Data for Table
-                # Rows: Comp 1, Comp 2, Comp 3
-                # Cols: Bed #, Bath #, Sqft
+            # Metric Display: Estimated Rent
+            est_rent = rent_d.get("estimated_rent", 0)
+            
+            # Show Estimated Rent in Main Area or just below?
+            # It's nice to show it prominently
+            st.metric("Estimated Monthly Rent", f"${est_rent:,}")
                 
             if comps:
                 st.markdown("#### 🏘️ Comparable Listings")
                 st.caption(f"Based on recent rentals within a 1.5 mile radius.")
                 
                 # CUSTOM HTML/CSS TABLE TO MATCH DESIGN
-                # Using HTML to get double-line rows (Address Line 1 / 2) and Similarity badges
+                import textwrap
                 
-                table_html = """
-                <style>
-                    .comp-table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        font-family: 'Inter', sans-serif;
-                        font-size: 0.9rem;
-                        color: #202124;
-                    }
-                    .comp-table th {
-                        text-align: left;
-                        text-transform: uppercase;
-                        font-size: 0.75rem;
-                        color: #5F6368;
-                        border-bottom: 1px solid #E0E0E0;
-                        padding: 10px 5px;
-                        font-weight: 600;
-                    }
-                    .comp-table td {
-                        padding: 12px 5px;
-                        border-bottom: 1px solid #F1F3F4;
-                        vertical-align: top;
-                    }
-                    .comp-num {
-                        display: inline-block;
-                        width: 24px; 
-                        height: 24px; 
-                        background-color: #5F6368; 
-                        color: white; 
-                        border-radius: 50%; 
-                        text-align: center; 
-                        line-height: 24px; 
-                        font-size: 0.8rem;
-                        font-weight: bold;
-                    }
-                    .addr-main { font-weight: 600; font-size: 0.95rem; }
-                    .addr-sub { color: #5F6368; font-size: 0.85rem; }
-                    .price-main { font-weight: 700; color: #333; }
-                    .price-sub { color: #5F6368; font-size: 0.85rem; }
-                    .sim-badge {
-                        background-color: #E6F4EA; 
-                        color: #137333; 
-                        padding: 3px 8px; 
-                        border-radius: 12px; 
-                        font-weight: 600; 
-                        font-size: 0.85rem;
-                        display: inline-block;
-                    }
-                    .type-main { color: #3C4043; }
-                    .type-sub { color: #5F6368; font-size: 0.8rem; }
-                    
-                </style>
-                <table class="comp-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 5%;"></th>
-                            <th style="width: 30%;">ADDRESS</th>
-                            <th style="width: 15%;">LISTED RENT</th>
-                            <th style="width: 15%;">LAST SEEN</th>
-                            <th style="width: 10%;">SIMILARITY</th>
-                            <th style="width: 10%;">DISTANCE</th>
-                            <th style="width: 5%;">BEDS</th>
-                            <th style="width: 5%;">BATHS</th>
-                            <th style="width: 10%;">SQ.FT.</th>
-                            <th style="width: 15%;">TYPE</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                """
+                table_html = textwrap.dedent("""
+                    <style>
+                        .comp-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            font-family: 'Inter', sans-serif;
+                            font-size: 0.9rem;
+                            color: #202124;
+                        }
+                        .comp-table th {
+                            text-align: left;
+                            text-transform: uppercase;
+                            font-size: 0.75rem;
+                            color: #5F6368;
+                            border-bottom: 1px solid #E0E0E0;
+                            padding: 10px 5px;
+                            font-weight: 600;
+                        }
+                        .comp-table td {
+                            padding: 12px 5px;
+                            border-bottom: 1px solid #F1F3F4;
+                            vertical-align: top;
+                        }
+                        .comp-num {
+                            display: inline-block;
+                            width: 24px; 
+                            height: 24px; 
+                            background-color: #5F6368; 
+                            color: white; 
+                            border-radius: 50%; 
+                            text-align: center; 
+                            line-height: 24px; 
+                            font-size: 0.8rem;
+                            font-weight: bold;
+                        }
+                        .addr-main { font-weight: 600; font-size: 0.95rem; }
+                        .addr-sub { color: #5F6368; font-size: 0.85rem; }
+                        .price-main { font-weight: 700; color: #333; }
+                        .price-sub { color: #5F6368; font-size: 0.85rem; }
+                        .sim-badge {
+                            background-color: #E6F4EA; 
+                            color: #137333; 
+                            padding: 3px 8px; 
+                            border-radius: 12px; 
+                            font-weight: 600; 
+                            font-size: 0.85rem;
+                            display: inline-block;
+                        }
+                        .type-main { color: #3C4043; }
+                        .type-sub { color: #5F6368; font-size: 0.8rem; }
+                        
+                    </style>
+                    <table class="comp-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 5%;"></th>
+                                <th style="width: 30%;">ADDRESS</th>
+                                <th style="width: 15%;">LISTED RENT</th>
+                                <th style="width: 15%;">LAST SEEN</th>
+                                <th style="width: 10%;">SIMILARITY</th>
+                                <th style="width: 10%;">DISTANCE</th>
+                                <th style="width: 5%;">BEDS</th>
+                                <th style="width: 5%;">BATHS</th>
+                                <th style="width: 10%;">SQ.FT.</th>
+                                <th style="width: 15%;">TYPE</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                """)
                 
                 for i, c in enumerate(comps):
                     # Data preparation logic (moved from data.py or kept if robust there)
