@@ -342,9 +342,12 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
         - Census Data (Provided): {census_data}
         
         INSTRUCTIONS:
-        1. If 'Census Data' is missing, empty, or invalid, you MUST ESTIMATE the 'estimated_census' fields (Income, Education, Density) based on the address location.
-        2. If 'Census Data' is provided, you can just mirror it in 'estimated_census' or refine it.
-        3. Provide 'highlights' (Max 4), 'risks' (Max 3), 'score' (0-100), and 'investment_strategy' (Max 50 words).
+        1. PREFERENCE CHECK: If 'USER PREFERENCES CONTEXT' is provided, cross-reference it with the INPUT DATA. If a conflict is found (e.g. user dislikes highway, property is close), you MUST include a specific warning in 'risks'.
+        2. If 'Census Data' is missing, empty, or invalid, you MUST ESTIMATE the 'estimated_census' fields (Income, Education, Density) based on the address location.
+        3. If 'Census Data' is provided, you can just mirror it in 'estimated_census' or refine it.
+        4. Provide 'highlights' (Max 4), 'risks' (Max 3), 'score' (0-100), and 'investment_strategy' (Max 50 words).
+        
+        CRITICAL: If a User Preference is violated, the "score" should be penalized significantly (minus 10-20 points).
         
         CONTEXTUAL BENCHMARKS:
         State ({benchmarks['state_name']}) Income: ${benchmarks['state_income']:,}
