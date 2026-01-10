@@ -28,3 +28,36 @@ CREATE TABLE IF NOT EXISTS user_ratings (
     context TEXT, -- e.g., "Page: Property Analysis" or "Address: 123 Main St"
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+
+-- --- RLS POLICIES ---
+-- Enable RLS on tables (Best practice, though we will set permissive policies here since Streamlit handles auth)
+
+-- 1. User Preferences
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+
+-- Allow anyone with the API key to Select/Insert/Update (The Streamlit app controls the logic)
+CREATE POLICY "Allow public access to preferences"
+ON user_preferences
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+-- 2. User Ratings
+ALTER TABLE user_ratings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public access to ratings"
+ON user_ratings
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
+-- 3. Property Logs
+ALTER TABLE property_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public access to logs"
+ON property_logs
+FOR ALL
+USING (true)
+WITH CHECK (true);
+
