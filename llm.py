@@ -345,7 +345,7 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
         1. PREFERENCE CHECK: If 'USER PREFERENCES CONTEXT' is provided, cross-reference it with the INPUT DATA. If a conflict is found (e.g. user dislikes highway, property is close), you MUST include a specific warning in 'risks'.
         2. If 'Census Data' is missing, empty, or invalid, you MUST ESTIMATE the 'estimated_census' fields (Income, Education, Density) based on the address location.
         3. If 'Census Data' is provided, you can just mirror it in 'estimated_census' or refine it.
-        4. Provide 'highlights' (Max 4), 'risks' (Max 3), 'score' (0-100), and 'investment_strategy' (Max 50 words).
+        4. Provide 'highlights' (Max 4, max {config.get("bullet_word_limit", 15)} words/bullet), 'risks' (Max 3, max {config.get("bullet_word_limit", 15)} words/bullet), 'score' (0-100), and 'investment_strategy' (Max {config.get("strategy_word_limit", 50)} words).
         
         CRITICAL SCORING RULES:
         - If a User Preference is violated, penalize the "score" by 10-25 points depending on severity.

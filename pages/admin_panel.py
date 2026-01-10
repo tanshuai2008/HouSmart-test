@@ -60,6 +60,22 @@ with st.form("settings_form"):
         help="Higher values mean more creative/random responses."
     )
 
+    st.subheader("📝 Content Constraints")
+    
+    col_content1, col_content2 = st.columns(2)
+    with col_content1:
+        strategy_limit = st.number_input(
+            "Strategy Word Limit", 
+            min_value=10, max_value=500, 
+            value=int(config.get("strategy_word_limit", 50))
+        )
+    with col_content2:
+        bullet_limit = st.number_input(
+            "Highlights/Risks Word Limit (Per Bullet)", 
+            min_value=5, max_value=100, 
+            value=int(config.get("bullet_word_limit", 15))
+        )
+
     st.subheader("🔌 API Management")
     st.caption("Enable or disable external API calls. Disabling APIs will limit functionality.")
     
@@ -146,7 +162,9 @@ with st.form("settings_form"):
             "enable_geoapify": enable_geoapify,
             "enable_rentcast": enable_rentcast,
             "enable_census": enable_census,
-            "enable_llm": enable_llm
+            "enable_llm": enable_llm,
+            "strategy_word_limit": strategy_limit,
+            "bullet_word_limit": bullet_limit
         }
         
         if config_manager.save_config(new_config):
