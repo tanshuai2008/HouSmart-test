@@ -54,3 +54,7 @@ Starting Census Fetch for: 1838 E Wensley St, Philadelphia, PA 19134
 Geode Result: {'full_geoid': '421010188013', 'state': '42', 'county': '101', 'tract': '018801', 'block_group': '3'}
 ACS Result Count: 8
 Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 3054 N 24th Ln, Phoenix, AZ 85015
+Geode Result: {'full_geoid': '040131170003', 'state': '04', 'county': '013', 'tract': '117000', 'block_group': '3'}
+ACS Result Count: 14
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
