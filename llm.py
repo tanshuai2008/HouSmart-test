@@ -347,7 +347,9 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
         3. If 'Census Data' is provided, you can just mirror it in 'estimated_census' or refine it.
         4. Provide 'highlights' (Max 4), 'risks' (Max 3), 'score' (0-100), and 'investment_strategy' (Max 50 words).
         
-        CRITICAL: If a User Preference is violated, the "score" should be penalized significantly (minus 10-20 points).
+        CRITICAL SCORING RULES:
+        - If a User Preference is violated, penalize the "score" by 10-25 points depending on severity.
+        - You MUST add a specific item to 'highlights' explaining this penalty: "⚠️ Score Penalty (-XX pts): Conflict with preference [Preference Name] due to [Reason]."
         
         CONTEXTUAL BENCHMARKS:
         State ({benchmarks['state_name']}) Income: ${benchmarks['state_income']:,}
