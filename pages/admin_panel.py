@@ -6,6 +6,25 @@ st.set_page_config(page_title="HouSmart Admin Panel", page_icon="⚙️", layout
 
 st.title("⚙️ HouSmart Admin Panel")
 
+# --- Password Protection ---
+# Default password is "housmart_admin" if not set in secrets
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "housmart_admin")
+
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+
+if not st.session_state.admin_authenticated:
+    pwd_input = st.text_input("Enter Admin Password", type="password")
+    if st.button("Login"):
+        if pwd_input == ADMIN_PASSWORD:
+            st.session_state.admin_authenticated = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+    st.stop() # Stop execution if not authenticated
+
+# --- Admin Content Below ---
+
 # Load current config
 config = config_manager.get_config()
 

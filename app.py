@@ -175,7 +175,7 @@ st.markdown("""
 <div class="header-container">
     <div class="header-logo">HouSmart</div>
     <div class="header-nav">
-        <a href="#">Home</a> | <a href="#">About Us</a> | <a href="/admin_panel">Admin</a>
+        <a href="#">Home</a> | <a href="#">About Us</a> | <a href="mailto:tanshuai2008@gmail.com">Contact Me</a> | <a href="/admin_panel">Admin</a>
     </div>
 </div>
 """, unsafe_allow_html=True)
