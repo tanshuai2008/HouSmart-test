@@ -232,6 +232,10 @@ with col1:
         # We can target by aria-label since Streamlit puts it on the input.
         styles.append('div[data-testid="stTextInput"]:has(input[aria-label="Address"]) label { color: black !important; }')
 
+        # NEW: Move Email Input container UP by 20px
+        # We target the email input specifically by its label aria-label
+        styles.append('div[data-testid="stTextInput"]:has(input[aria-label="User Email (Required)"]) { margin-top: -20px !important; }')
+
         if is_email_bad:
             # Target the input by Label (covering both label states)
             styles.append('input[aria-label="Or Input User Email (Required)"], input[aria-label="User Email (Required)"] { border: 2px solid #EA4335 !important; }')
@@ -261,7 +265,8 @@ with col1:
         # Display Usage Count (Works for both)
         if final_user_email:
             usage_count = get_daily_usage(final_user_email)
-            st.caption(f"Free Trial in past 24h: {usage_count}/3")
+            # Move up by 10px
+            st.markdown(f"<div style='margin-top: -10px; font-size: 0.8rem; color: #5F6368;'>Free Trial in past 24h: {usage_count}/3</div>", unsafe_allow_html=True)
  
  
     # Card B: Property Details
