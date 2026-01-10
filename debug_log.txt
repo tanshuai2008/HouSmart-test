@@ -26,3 +26,31 @@ Starting Census Fetch for: 123 Market St, San Francisco, CA
 Geode Result: {'full_geoid': '060750615071', 'state': '06', 'county': '075', 'tract': '061507', 'block_group': '1'}
 ACS Result Count: 14
 Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 6611 natasha ct, 60525
+Geode Result: {'full_geoid': '170318202041', 'state': '17', 'county': '031', 'tract': '820204', 'block_group': '1'}
+ACS Result Count: 13
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 123 Market St, San Francisco, CA
+Geode Result: {'full_geoid': '060750615071', 'state': '06', 'county': '075', 'tract': '061507', 'block_group': '1'}
+ACS Result Count: 14
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 123 Market St, San Francisco, CA
+Geode Result: {'full_geoid': '060750615071', 'state': '06', 'county': '075', 'tract': '061507', 'block_group': '1'}
+ACS Result Count: 14
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 123 Market St, San Francisco, CA
+Geode Result: {'full_geoid': '060750615071', 'state': '06', 'county': '075', 'tract': '061507', 'block_group': '1'}
+ACS Result Count: 14
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 5430 enfield way, suwanee, GA, 30024
+Geode Result: {'full_geoid': '131171306101', 'state': '13', 'county': '117', 'tract': '130610', 'block_group': '1'}
+ACS Result Count: 13
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 3023 brookview dr. pearland, tx, 77584
+Geode Result: {'full_geoid': '480396607033', 'state': '48', 'county': '039', 'tract': '660703', 'block_group': '3'}
+ACS Result Count: 13
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+Starting Census Fetch for: 1838 E Wensley St, Philadelphia, PA 19134
+Geode Result: {'full_geoid': '421010188013', 'state': '42', 'county': '101', 'tract': '018801', 'block_group': '3'}
+ACS Result Count: 8
+Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])

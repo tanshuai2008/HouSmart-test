@@ -106,11 +106,11 @@ def get_user_preferences(user_email):
 
 def save_user_preferences(user_email, summary):
     """
-    Upsert user preferences.
+    Upsert user preferences. Returns (success, error_msg).
     """
     supabase = get_supabase_client()
     if not supabase or not user_email:
-        return False
+        return False, "Missing Supabase client or User Email"
         
     try:
         record = {
@@ -121,10 +121,10 @@ def save_user_preferences(user_email, summary):
         
         # Upsert
         supabase.table("user_preferences").upsert(record).execute()
-        return True
+        return True, None
     except Exception as e:
         print(f"Supabase Prefs Write Error: {e}")
-        return False
+        return False, str(e)
 
 def save_user_rating(user_email, rating, context=None):
     """

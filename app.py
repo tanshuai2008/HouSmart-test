@@ -987,11 +987,12 @@ with col3:
                 try:
                     current_prefs = supabase_utils.get_user_preferences(target_email)
                     new_summary = llm.refine_preferences(current_prefs, user_input)
-                    if supabase_utils.save_user_preferences(target_email, new_summary):
+                    success, err_msg = supabase_utils.save_user_preferences(target_email, new_summary)
+                    if success:
                         st.toast("✅ AI has remembered your preference!")
                         # Optional cleanup if we could, but streamlit can't easily clear widget state effectively without tricky callbacks
                     else:
-                        st.error("Failed to save preferences.")
+                        st.error(f"Failed to save preferences. Details: {err_msg}")
                 except Exception as e:
                     st.error(f"Error: {e}")
 
