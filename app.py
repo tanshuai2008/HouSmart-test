@@ -880,21 +880,25 @@ with main_left:
         # Helper to Bold Numbers/Percentages
         import re
         def bold_numbers(text):
+            if not text: return ""
             # Regex to match: $Dollar, 12,345, 99%, 4.5
-            # Matches: $?, digits+commas/dots, optional %
-            return re.sub(r'(\+?-?\$?[\d,]+(?:\.\d+)?%?)', r'**\1**', str(text))
+            # Must contain at least one digit to avoid matching punctuation like "," or "."
+            return re.sub(r'(\+?-?\$?\d+(?:,\d+)*(?:\.\d+)?%?)', r'**\1**', str(text))
 
         st.info(f"**Investment Strategy:**\n{bold_numbers(strategy)}", icon="🤖")
         
         ai_c1, ai_c2 = st.columns(2)
         with ai_c1:
             st.markdown("**Key Advantages**")
-            for h in highlights:
+            # Filter empty strings and strip accidental quotes
+            valid_highlights = [h.strip().strip('"').strip("'") for h in highlights if h and str(h).strip()]
+            for h in valid_highlights:
                 st.success(f"✅ {bold_numbers(h)}")
 
         with ai_c2:
             st.markdown("**Potential Risks**")
-            for r in risks:
+            valid_risks = [r.strip().strip('"').strip("'") for r in risks if r and str(r).strip()]
+            for r in valid_risks:
                 st.warning(f"⚠️ {bold_numbers(r)}")
 
 
