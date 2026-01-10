@@ -556,54 +556,59 @@ with col2:
             local_age = c_data.get("median_age", {}).get("local", 0)
             age_title = f"Age (Median: {local_age:.1f})" if local_age else "Age"
             
-            # Scale Factor: Local / National(38.9)
+            # Simulated 5 buckets based on Median
+            # <18, 18-24, 25-44, 45-64, >64
+            # US Avg approx: 22, 9, 27, 25, 17
+            v_u18, v_18_24, v_25_44, v_45_64, v_65_plus = 22, 9, 27, 25, 17
+            
             age_factor = 1.0
             if local_age:
                 age_factor = local_age / 38.9
-            
-            # Mock Age Dist: 0-18(20), 19-35(40), 36-50(25), 50+(15)
-            # If older (factor > 1), boost 50+ and 36-50.
-            # If younger (factor < 1), boost 19-35 and 0-18.
-            v_0_18 = 20
-            v_19_35 = 40
-            v_36_50 = 25
-            v_50_plus = 15
-            
-            if age_factor > 1.1: # Older
-                v_50_plus += 15
-                v_36_50 += 5
-                v_19_35 -= 10
-                v_0_18 -= 10
-            elif age_factor < 0.9: # Younger
-                v_19_35 += 10
-                v_0_18 += 5
-                v_50_plus -= 10
-                v_36_50 -= 5
                 
+            if age_factor > 1.1: # Older
+                v_65_plus += 8
+                v_45_64 += 5
+                v_25_44 -= 5
+                v_u18 -= 5
+                v_18_24 -= 3
+            elif age_factor < 0.9: # Younger
+                v_25_44 += 5
+                v_18_24 += 5
+                v_u18 += 5
+                v_65_plus -= 10
+                v_45_64 -= 5
+
             # Normalize
-            total_age = v_0_18 + v_19_35 + v_36_50 + v_50_plus
-            v_0_18 = (v_0_18/total_age)*100
-            v_19_35 = (v_19_35/total_age)*100
-            v_36_50 = (v_36_50/total_age)*100
-            v_50_plus = (v_50_plus/total_age)*100
+            tot_age = v_u18 + v_18_24 + v_25_44 + v_45_64 + v_65_plus
+            v_u18 = (v_u18/tot_age)*100
+            v_18_24 = (v_18_24/tot_age)*100
+            v_25_44 = (v_25_44/tot_age)*100
+            v_45_64 = (v_45_64/tot_age)*100
+            v_65_plus = (v_65_plus/tot_age)*100
             
             # 3. RACE (Real Counts)
             r_white = c_data.get("Race_White", {}).get("local", 0)
             r_black = c_data.get("Race_Black", {}).get("local", 0)
             r_asian = c_data.get("Race_Asian", {}).get("local", 0)
             r_hisp = c_data.get("Origin_Hispanic", {}).get("local", 0)
-            # Total Pop for percentage calculation
-            r_total = r_white + r_black + r_asian + r_hisp # Approximation
-            if r_total == 0: r_total = 1
+            
+            # Total Pop
+            r_total = c_data.get("Race_Total", {}).get("local", 0)
+            if r_total == 0: 
+                r_total = r_white + r_black + r_asian + r_hisp
+                if r_total == 0: r_total = 1
             
             vp_white = (r_white / r_total) * 100
-            vp_black = (r_black / r_total) * 100 # Map to "Other"? No, data.py keys: White, Black, Asian, Hisp
-            # Our Chart has columns: Asian, White, Hisp, Oth
-            # Let's map Black to "Oth" for now as Chart only has 4 cols?
-            # Or better, rename "Oth" to "Black/Oth"?
+            vp_black = (r_black / r_total) * 100
             vp_asian = (r_asian / r_total) * 100
             vp_hisp = (r_hisp / r_total) * 100
-            vp_oth = (r_black / r_total) * 100 # Using Black count for Other column for now to show variation
+            
+            # Calculate Other
+            # If total is consistent, Other = Total - Sum(4 groups)
+            # Ensure non-negative
+            sum_known = r_white + r_black + r_asian + r_hisp
+            r_other = max(0, r_total - sum_known)
+            vp_oth = (r_other / r_total) * 100
             
             # 4. EDUCATION (Real Counts)
             e_tot = c_data.get("Edu_Total_25_Plus", {}).get("local", 1)
@@ -613,9 +618,9 @@ with col2:
             e_prof = c_data.get("Edu_Prof", {}).get("local", 0)
             e_doc = c_data.get("Edu_Doctorate", {}).get("local", 0)
             
-            # Chart Columns: HighSch, Bach, Grad
-            # Grad = Master + Prof + Doc
             if e_tot == 0: e_tot = 1
+            
+            # Local is discrete
             vp_hs = (e_hs / e_tot) * 100
             vp_bach = (e_bach / e_tot) * 100
             vp_grad = ((e_mast + e_prof + e_doc) / e_tot) * 100
@@ -625,12 +630,42 @@ with col2:
             inc_title = "Income"
             v_low_inc, v_mid_inc, v_high_inc = 15, 45, 40
             age_title = "Age"
-            v_0_18, v_19_35, v_36_50, v_50_plus = 20, 40, 25, 15
-            vp_asian, vp_white, vp_hisp, vp_oth = 35, 30, 20, 15
-            vp_hs, vp_bach, vp_grad = 10, 50, 40
+            v_u18, v_18_24, v_25_44, v_45_64, v_65_plus = 22, 9, 27, 25, 17
+            vp_white, vp_hisp, vp_black, vp_asian, vp_oth = 40, 20, 15, 10, 15
+            vp_hs, vp_bach, vp_grad = 20, 40, 40
 
         # 1. Define DataFrames (Use session_state if available, else Mock)
-        # We will try to inject real data into the "Local" column if possible.
+        
+        # Determine State Benchmarks
+        # data.py returns `benchmarks` dict inside census_data
+        # state_data.get_state_benchmarks returns: state_edu (List), state_age (List), state_race (List)
+        bench_data = st.session_state.census_data.get("benchmarks", {}) if "census_data" in st.session_state and st.session_state.census_data else {}
+        
+        # State Data
+        s_edu = bench_data.get("state_edu", [90, 35, 13]) # HS+, Bach+, Adv+
+        s_age = bench_data.get("state_age", [22, 9, 27, 25, 17]) # <18, 18-24, 25-44, 45-64, >64
+        s_race = bench_data.get("state_race", [57, 20, 14, 7, 2]) # White, Hispanic, Black, Asian, Other
+        
+        # National Data
+        u_edu = bench_data.get("us_edu", [90.6, 35.4, 13.2])
+        u_age = bench_data.get("us_age", [21.5, 9.2, 26.5, 24.8, 18.0])
+        u_race = bench_data.get("us_race", [57.5, 20.0, 13.7, 6.7, 2.1])
+        
+        # Logic for Education Bars (Subtraction for Benchmarks)
+        # Adv-Degree = Adv+
+        # Bachelor = Bach+ - Adv+
+        # HighSchool = HS+ - Bach+
+        
+        def calc_edu_buckets(arr):
+             # arr = [HS+, Bach+, Adv+]
+             if not arr or len(arr) < 3: return [0, 0, 0]
+             adv = arr[2]
+             bach = arr[1] - arr[2]
+             hs = arr[0] - arr[1]
+             return [hs, bach, adv]
+             
+        s_hs, s_bach, s_adv = calc_edu_buckets(s_edu)
+        u_hs, u_bach, u_adv = calc_edu_buckets(u_edu)
         
         df_income = pd.DataFrame({
             "Range": ["<50k", "<50k", "<50k", "50-100k", "50-100k", "50-100k", "100k+", "100k+", "100k+"],
@@ -643,33 +678,37 @@ with col2:
         })
 
         df_age = pd.DataFrame({
-            "Range": ["0-18", "0-18", "0-18", "19-35", "19-35", "19-35", "36-50", "36-50", "36-50", "50+", "50+", "50+"],
-            "Scope": ["Local", "State", "National"] * 4,
+            "Range": ["<18", "<18", "<18", "18-24", "18-24", "18-24", "25-44", "25-44", "25-44", "45-64", "45-64", "45-64", ">64", ">64", ">64"],
+            "Scope": ["Local", "State", "National"] * 5,
             "Value": [
-                v_0_18, 22, 21, 
-                v_19_35, 35, 30, 
-                v_36_50, 28, 29, 
-                v_50_plus, 15, 20
+                v_u18, s_age[0], u_age[0],
+                v_18_24, s_age[1], u_age[1],
+                v_25_44, s_age[2], u_age[2],
+                v_45_64, s_age[3], u_age[3],
+                v_65_plus, s_age[4], u_age[4]
             ]
         })
 
+        # Race Order: White, Hispanic, Black, Asian, Other
         df_race = pd.DataFrame({
-            "Group": ["Asian", "Asian", "Asian", "White", "White", "White", "Hisp", "Hisp", "Hisp", "Oth", "Oth", "Oth"],
-            "Scope": ["Local", "State", "National"] * 4,
+            "Group": ["White", "White", "White", "Hispanic", "Hispanic", "Hispanic", "Black", "Black", "Black", "Asian", "Asian", "Asian", "Other", "Other", "Other"],
+            "Scope": ["Local", "State", "National"] * 5,
             "Value": [
-                vp_asian, 15, 6, 
-                vp_white, 40, 60, 
-                vp_hisp, 30, 18, 
-                vp_oth, 15, 16]
+                vp_white, s_race[0], u_race[0],
+                vp_hisp, s_race[1], u_race[1],
+                vp_black, s_race[2], u_race[2],
+                vp_asian, s_race[3], u_race[3],
+                vp_oth, s_race[4], u_race[4]
+            ]
         })
 
         df_edu = pd.DataFrame({
-            "Level": ["HighSch", "HighSch", "HighSch", "Bach", "Bach", "Bach", "Grad", "Grad", "Grad"],
+            "Level": ["HighSchool", "HighSchool", "HighSchool", "Bachelor", "Bachelor", "Bachelor", "Adv-Degree", "Adv-Degree", "Adv-Degree"],
             "Scope": ["Local", "State", "National"] * 3,
             "Value": [
-                vp_hs, 20, 25, 
-                vp_bach, 45, 40, 
-                vp_grad, 35, 35
+                vp_hs, s_hs, u_hs, 
+                vp_bach, s_bach, u_bach, 
+                vp_grad, s_adv, u_adv
             ]
         })
         
@@ -774,10 +813,6 @@ with main_left:
                 for i, c in enumerate(comps[:5]):
                     price_fmt = f"${c.get('price', 0):,}"
                     ppsf_fmt = f"${c.get('ppsf', 0):.2f} /ft²" if c.get('ppsf') else "-"
-                    last_seen = c.get("lastSeenDate", "N/A")
-                    days_old = c.get("daysOld", "N/A")
-                    days_sub = f"{days_old} Days Ago" if days_old != "N/A" else ""
-                    sim_fmt = f"{c.get('similarity', 0)}%"
                     dist_fmt = f"{c.get('distance', 0):.2f} mi"
                     beds = c.get('bedrooms', '-')
                     baths = c.get('bathrooms', '-')
@@ -788,9 +823,9 @@ with main_left:
                     addr1 = c.get('address_line1', 'Unknown')
                     addr2 = c.get('address_line2', '')
                     
-                    rows_html += f"""<tr><td><span class="comp-num">{i+1}</span></td><td><div class="addr-main">{addr1}</div><div class="addr-sub">{addr2}</div></td><td><div class="price-main">{price_fmt}</div><div class="price-sub">{ppsf_fmt}</div></td><td><div style="color:#3C4043;">{last_seen}</div><div class="price-sub">{days_sub}</div></td><td><span class="sim-badge">{sim_fmt}</span></td><td style="color:#5F6368;">{dist_fmt}</td><td style="color:#3C4043;">{beds}</td><td style="color:#3C4043;">{baths}</td><td style="color:#3C4043;">{sqft}</td><td><div class="type-main">{p_type}</div><div class="type-sub">{y_built}</div></td></tr>"""
+                    rows_html += f"""<tr><td><span class="comp-num">{i+1}</span></td><td><div class="addr-main">{addr1}</div><div class="addr-sub">{addr2}</div></td><td><div class="price-main">{price_fmt}</div><div class="price-sub">{ppsf_fmt}</div></td><td style="color:#5F6368;">{dist_fmt}</td><td style="color:#3C4043;">{beds}</td><td style="color:#3C4043;">{baths}</td><td style="color:#3C4043;">{sqft}</td><td><div class="type-main">{p_type}</div><div class="type-sub">{y_built}</div></td></tr>"""
 
-                full_table = f"""{style_block}<table class="comp-table"><thead><tr><th style="width:5%;"></th><th style="width:30%;">ADDRESS</th><th style="width:15%;">LISTED RENT</th><th style="width:15%;">LAST SEEN</th><th style="width:10%;">SIMILARITY</th><th style="width:10%;">DISTANCE</th><th style="width:5%;">BEDS</th><th style="width:5%;">BATHS</th><th style="width:10%;">SQ.FT.</th><th style="width:15%;">TYPE</th></tr></thead><tbody>{rows_html}</tbody></table>"""
+                full_table = f"""{style_block}<table class="comp-table"><thead><tr><th style="width:5%;"></th><th style="width:30%;">ADDRESS</th><th style="width:20%;">LISTED RENT</th><th style="width:10%;">DISTANCE</th><th style="width:5%;">BEDS</th><th style="width:5%;">BATHS</th><th style="width:10%;">SQ.FT.</th><th style="width:15%;">TYPE</th></tr></thead><tbody>{rows_html}</tbody></table>"""
                 
                 st.markdown(full_table, unsafe_allow_html=True)
 
@@ -813,8 +848,34 @@ with main_left:
         strategy = llm_res.get("investment_strategy", "No analysis available.")
         
         with c_score:
-            delta_label = "Opportunity" if score > 70 else "Caution"
-            st.metric("AI Score", f"{score}/100", delta=delta_label)
+            # 75-100: Green "High Opportunity", 60-74 Orng "Good Opportunity", <60 Red "Caution!"
+            delta_color = "normal"
+            if score >= 75:
+                delta_label = "High Opportunity"
+                delta_color = "normal" # We really want Green. delta="text" usually colors green for positive
+                score_icon = "🟢"
+            elif score >= 60:
+                delta_label = "Good Opportunity"
+                score_icon = "🟠"
+                delta_color = "off" # Greyish? Streamlit metrics limited. We can use st.markdown instead.
+            else:
+                delta_label = "Caution!"
+                delta_color = "inverse"
+                score_icon = "🔴"
+            
+            # Using custom HTML/Markdown for better color control
+            color_hex = "#137333" if score >= 75 else ("#E37400" if score >= 60 else "#D93025")
+            st.markdown(f"""
+            <div style="text-align: right;">
+                <div style="font-size: 1rem; color: #5f6368;">AI Location Score</div>
+                <div style="font-size: 2rem; font-weight: bold; color: {color_hex};">
+                    {score}/100
+                </div>
+                <div style="font-size: 0.9rem; color: {color_hex}; font-weight: 600;">
+                    {score_icon} {delta_label}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
         # Helper to Bold Numbers/Percentages
         import re
@@ -947,42 +1008,60 @@ with col3:
     with st.container(border=True):
         st.markdown("### Rate this Analysis")
         
+        # Session state for rating
+        if "rating_submitted" not in st.session_state:
+            st.session_state.rating_submitted = False
+            
         rate_col1, rate_col2 = st.columns([2, 1])
         
         with rate_col1:
             # Use st.feedback if available
             rating_val = 0
+            # Disable if submitted
+            disabled = st.session_state.rating_submitted
+            
             if hasattr(st, "feedback"):
                 # Using key='user_rating_widget' 
-                # Note: st.feedback updates session state immediately on click.
-                # We just read it when button is clicked.
-                st.feedback("stars", key="user_rating_widget")
+                st.feedback("stars", key="user_rating_widget", disabled=disabled)
             else:
-                st.slider("Rating", 0.0, 5.0, 0.0, 0.5, key="user_rating_widget")
+                st.slider("Rating", 0.0, 5.0, 0.0, 0.5, key="user_rating_widget", disabled=disabled)
         
         with rate_col2:
             st.write("") # Spacer
-            st.write("") 
-            if st.button("Submit Rating", type="primary", use_container_width=True):
-                 # Retrieve value from widget state
-                 raw_val = st.session_state.get("user_rating_widget")
-                 
-                 # Adjust for 0-index if using feedback
-                 final_rating = 0
-                 if raw_val is not None:
-                     if hasattr(st, "feedback") and isinstance(raw_val, int):
-                         final_rating = raw_val + 1
+            st.write("")
+            
+            if st.session_state.rating_submitted:
+                 st.info("User already submitted.")
+            else:
+                if st.button("Submit Rating", type="primary", use_container_width=True):
+                     # Retrieve value from widget state
+                     raw_val = st.session_state.get("user_rating_widget")
+                     
+                     # Adjust for 0-index if using feedback
+                     final_rating = 0
+                     if raw_val is not None:
+                         if hasattr(st, "feedback") and isinstance(raw_val, int):
+                             final_rating = raw_val + 1
+                         else:
+                             final_rating = raw_val
+                     
+                     if final_rating > 0:
+                        target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
+                        ctx = f"Address: {st.session_state.get('address_input', 'Unknown')}"
+                        
+                        st.session_state.rating_submitted = True # Lock it
+                        
+                        if target_email:
+                            # We can try/except here just in case
+                            try:
+                                supabase_utils.save_user_rating(target_email, final_rating, context=ctx)
+                                st.toast(f"✅ Submitted {final_rating} Stars!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error saving rating: {e}")
+                                st.session_state.rating_submitted = False # Unlock if failed
+                        else:
+                            st.toast(f"✅ Thanks for rating!")
+                            st.rerun()
                      else:
-                         final_rating = raw_val
-                 
-                 if final_rating > 0:
-                    target_email = st.session_state.google_user.get("email") if st.session_state.get("google_user") else st.session_state.get("user_email_input")
-                    ctx = f"Address: {st.session_state.get('address_input', 'Unknown')}"
-                    
-                    if target_email:
-                        supabase_utils.save_user_rating(target_email, final_rating, context=ctx)
-                        st.toast(f"✅ Submitted {final_rating} Stars!")
-                    else:
-                        st.toast(f"✅ Thanks for rating!")
-                 else:
-                    st.warning("Please select stars first.")
+                        st.warning("Please select stars first.")
