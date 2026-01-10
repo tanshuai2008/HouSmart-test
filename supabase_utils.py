@@ -6,15 +6,26 @@ import streamlit as st
 # Helper to get client
 def get_supabase_client():
     try:
-        # Try loading from Streamlit secrets first, then Environment variables
-        url = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
-        key = st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY")
+        # Try loading from Streamlit secrets (Top-level or Nested)
+        url = st.secrets.get("SUPABASE_URL")
+        key = st.secrets.get("SUPABASE_KEY")
+        
+        # Check for [supabase] section in secrets.toml
+        if not url and "supabase" in st.secrets:
+            url = st.secrets["supabase"].get("URL") or st.secrets["supabase"].get("url")
+            key = st.secrets["supabase"].get("KEY") or st.secrets["supabase"].get("key")
+            
+        # Fallback to Environment variables
+        if not url: url = os.environ.get("SUPABASE_URL")
+        if not key: key = os.environ.get("SUPABASE_KEY")
         
         if not url or not key:
-            # For local testing without st.secrets, ensure .env is loaded
-            # from dotenv import load_dotenv; load_dotenv()
-            # url = os.getenv("SUPABASE_URL") ...
-            print("Supabase credentials missing.")
+            # Debugging aid (Safe print)
+            print("DEBUG: Supabase Credentials MISSING.")
+            if "supabase" in st.secrets:
+                print(f"DEBUG: Found [supabase] section. Keys: {list(st.secrets['supabase'].keys())}")
+            else:
+                print(f"DEBUG: Top-level keys: {list(st.secrets.keys())}")
             return None
             
         return create_client(url, key)
@@ -109,8 +120,10 @@ def save_user_preferences(user_email, summary):
     Upsert user preferences. Returns (success, error_msg).
     """
     supabase = get_supabase_client()
-    if not supabase or not user_email:
-        return False, "Missing Supabase client or User Email"
+    if not supabase:
+        return False, "Supabase Client failed to initialize (Missing Key/URL)."
+    if not user_email:
+        return False, "User Email is missing."
         
     try:
         record = {
