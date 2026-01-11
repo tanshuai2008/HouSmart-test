@@ -392,6 +392,14 @@ if st.session_state.processing:
             count_rentcast += 1
         st.session_state.rent_data = rent_data
         
+        # 4b. Schools (Supabase) [NEW]
+        sp_url = st.secrets.get("SUPABASE_URL")
+        sp_key = st.secrets.get("SUPABASE_KEY")
+        schools_data = []
+        if sp_url and sp_key:
+             schools_data = data.get_nearby_schools_data(lat, lon, sp_url, sp_key, miles=3.0)
+        st.session_state.schools = schools_data
+        
         # 5. LLM Analysis
         # Get Weights (just defaults for now or from config if enabled)
         weights = {"cashflow": 50, "appreciation": 50} 
@@ -719,23 +727,18 @@ with col2:
         
         # 2. Determine Dynamic State Label
         state_label = "State"
-        try:
-            addr_input = st.session_state.get("address_input", "")
-            import re
-            match = re.search(r'\b([A-Z]{2})\b\s+\d{5}', addr_input)
-            if match:
-                state_label = f"{match.group(1)} State"
-            else:
-                parts = [p.strip() for p in addr_input.split(",")]
-                if len(parts) >= 2:
-                    last_chunk = parts[-1]
-                    sub_parts = last_chunk.split()
-                    for sp in sub_parts:
-                         if len(sp) == 2 and sp.isalpha() and sp.isupper():
-                             state_label = f"{sp} State"
-                             break
-        except:
-             pass
+        # Use robust State Name from Census Data (via data.py -> state_data)
+        if bench_data and "state_name" in bench_data:
+             state_label = bench_data["state_name"]
+        else:
+             # Fallback regex only if census data failed
+             try:
+                addr_input = st.session_state.get("address_input", "")
+                import re
+                match = re.search(r'\b([A-Z]{2})\b\s+\d{5}', addr_input)
+                if match:
+                    state_label = f"{match.group(1)} State"
+             except: pass
 
         # 3. Update all DataFrames
         df_income["Scope"] = df_income["Scope"].replace("State", state_label)
@@ -911,13 +914,14 @@ with main_left:
             # Filter empty strings and strip accidental quotes
             valid_highlights = [h.strip().strip('"').strip("'") for h in highlights if h and str(h).strip()]
             for h in valid_highlights:
-                st.success(f"✅ {bold_numbers(h)}")
+                # Remove bold_numbers to prevent formatting issues
+                st.success(f"✅ {h}")
 
         with ai_c2:
             st.markdown("**Potential Risks**")
             valid_risks = [r.strip().strip('"').strip("'") for r in risks if r and str(r).strip()]
             for r in valid_risks:
-                st.warning(f"⚠️ {bold_numbers(r)}")
+                st.warning(f"⚠️ {r}")
 
 
 # --- COLUMN 3: MAP (40%) ---
@@ -978,6 +982,27 @@ with col3:
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
         """
         st.markdown(legend_html, unsafe_allow_html=True)
+
+    # Card G: Nearby Schools [NEW]
+    with st.container(border=True):
+        st.subheader("Nearby Schools (3 Mile Radius)")
+        schools = st.session_state.get("schools", [])
+        if schools:
+            for s in schools[:5]: # Show top 5
+                # Assuming s has keys: name, address, dist_miles, nces_id, city, state, zip
+                dist = s.get('dist_miles', 0)
+                name = s.get('name', 'Unknown School')
+                addr = s.get('address', '')
+                nces = s.get('nces_id')
+                
+                with st.expander(f"🎓 {name} ({dist:.2f} mi)"):
+                    st.write(f"Address: {addr}, {s.get('city','')}, {s.get('state','')} {s.get('zip','')}")
+                    if nces:
+                        gs_url = f"https://www.greatschools.org/search/search.page?q={nces}"
+                        st.markdown(f"[View GreatSchools Rating ↗]({gs_url})")
+        else:
+             st.info("No schools found within 3 miles (or DB connection skipped).")
+
 
     # --- USER FEEDBACK LOOP ---
     # --- USER FEEDBACK LOOP ---

@@ -3,7 +3,10 @@ import urllib.parse
 import random
 import datetime
 import state_data
+import state_data
 from config_manager import config_manager
+from supabase import create_client, Client # Ensure supabase is in requirements
+import os
 
 def log_debug(msg):
 
@@ -485,3 +488,28 @@ def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key
         print(f"RentCast Execution Error: {e}")
         
     return None
+
+def get_nearby_schools_data(lat, lon, supabase_url, supabase_key, miles=3.0):
+    """
+    Fetch nearby schools using Supabase RPC.
+    """
+    if not supabase_url or not supabase_key:
+        return []
+        
+    try:
+        supabase: Client = create_client(supabase_url, supabase_key)
+        
+        # Call RPC 'get_nearby_schools'
+        # user_lat, user_lon, radius_miles
+        params = {
+            "user_lat": float(lat), 
+            "user_lon": float(lon), 
+            "radius_miles": float(miles)
+        }
+        
+        response = supabase.rpc("get_nearby_schools", params).execute()
+        return response.data # specific to supabase-py v2+
+        
+    except Exception as e:
+        print(f"Supabase School Fetch Error: {e}")
+        return []
