@@ -110,9 +110,21 @@ def generate_map(lat, lon, pois):
         if label not in legend_items:
             legend_items[label] = (emoji, color)
         
+        # Extract Lat/Lon (Support both Mock properties and Real GeoJSON geometry)
+        lat = props.get('lat')
+        lon = props.get('lon')
+        
+        if (lat is None or lon is None) and "geometry" in p:
+            coords = p["geometry"].get("coordinates")
+            if coords and len(coords) >= 2:
+                lon, lat = coords[0], coords[1] # GeoJSON is [Lon, Lat]
+                
+        if lat is None or lon is None:
+            continue
+
         # Plot
         folium.Marker(
-            location=[props.get('lat'), props.get('lon')],
+            location=[lat, lon],
             tooltip=f"{props.get('name', 'Unknown')} ({label})",
             icon=DivIcon(
                 icon_size=(24,24),
