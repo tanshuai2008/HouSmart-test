@@ -396,7 +396,9 @@ def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key
         "bedrooms": bedrooms,
         "bathrooms": bathrooms,
         "squareFootage": sqft,
-        "propertyType": property_type
+        "propertyType": property_type,
+        "radius": 3.0, # Expanded to 3 miles
+        "limit": 10   # Fetch more candidates to sort
     }
     
     headers = {
@@ -473,12 +475,19 @@ def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key
                     "propertyType": c.get("propertyType", "Unknown"),
                     "yearBuilt": c.get("yearBuilt", "")
                 })
+            
+            # Sort by similarity (high to low)
+            # Handle None/0 safely by using .get('similarity', 0)
+            comps_sorted = sorted(top_3, key=lambda x: x.get("similarity", 0), reverse=True)
+            
+            # Take Top 5
+            comps_final = comps_sorted[:5]
                 
             return {
                 "estimated_rent": estimate,
                 "rent_range": rent_range,  # [Low, High]
                 "currency": data.get("currency", "USD"),
-                "comparables": top_3
+                "comparables": comps_final
             }
             
         else:
