@@ -16,6 +16,7 @@ import auth # Custom Auth Module
 import supabase_utils
 import data # Geocoding & Data Service
 import llm # LLM Analysis Service
+from config_manager import config_manager as app_config
 
 # Page Configuration
 st.set_page_config(layout="wide", page_title="HouSmart Dashboard", page_icon="🏠")
@@ -286,11 +287,11 @@ with col1:
             
         st.selectbox("Property Type", ["Single Family", "Townhouse", "Condo", "Apartment"])
         # Limit Check Logic
-        import config_manager
-        app_config = config_manager.config_manager.get_config()
+        # Limit Check Logic
+        app_config_data = app_config.get_config()
         
-        enable_limit = app_config.get("enable_daily_limit", True)
-        whitelist = app_config.get("whitelist_emails", [])
+        enable_limit = app_config_data.get("enable_daily_limit", True)
+        whitelist = app_config_data.get("whitelist_emails", [])
         
         current_email = st.session_state.google_user.get("email") if st.session_state.google_user else st.session_state.get("user_email_input", "")
         usage = get_daily_usage(current_email) if current_email else 0
@@ -945,7 +946,7 @@ with col3:
                 st.write("--- Debug Start ---")
                 
                 # Check Config
-                cfg_enable = config_manager.get_config().get("enable_geoapify", True)
+                cfg_enable = app_config.get_config().get("enable_geoapify", True)
                 st.write(f"Geoapify Config Enabled: {cfg_enable}")
                 
                 # Check Session State
