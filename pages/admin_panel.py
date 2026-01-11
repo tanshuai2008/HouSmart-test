@@ -14,9 +14,6 @@ if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
 
 if not st.session_state.admin_authenticated:
-    # DEBUG: Show expected password
-    st.warning(f"Debug: Expected Password is '{ADMIN_PASSWORD}' (Type: {type(ADMIN_PASSWORD)})")
-    
     pwd_input = st.text_input("Enter Admin Password", type="password")
     if st.button("Login"):
         if pwd_input == ADMIN_PASSWORD:
