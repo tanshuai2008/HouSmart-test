@@ -105,6 +105,7 @@ class CensusDataService:
             "B15003_023E": "Edu_Master",
             "B15003_024E": "Edu_Prof",
             "B15003_025E": "Edu_Doctorate",
+            "B15003_025E": "Edu_Doctorate",
             # Age
             "B01002_001E": "Median Age",
             "B01001_001E": "Total Population",

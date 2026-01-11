@@ -93,11 +93,18 @@ def generate_map(lat, lon, pois):
     # 3. POI Markers
     for p in pois:
         props = p.get('properties', {})
-        cat = props.get('categories', [])
-        if isinstance(props.get('category'), str):
-            cat = [props.get('category')]
+        # Robust category extraction
+        cat_raw = props.get('categories', [])
+        if not cat_raw:
+             # Try singular 'category' or 'datasource.raw.amenity' if needed
+             single = props.get('category')
+             if single: cat_raw = [single]
+        
+        # Ensure it's a list
+        if isinstance(cat_raw, str):
+            cat_raw = cat_raw.split(',')
             
-        emoji, color, label = get_category_style(cat)
+        emoji, color, label = get_category_style(cat_raw)
         
         # Add to Legend (unique)
         if label not in legend_items:

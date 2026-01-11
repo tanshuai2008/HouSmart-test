@@ -882,6 +882,19 @@ with main_left:
             </div>
             """, unsafe_allow_html=True)
         
+        # [NEW] Display Tier and Tenant Profile
+        tier = llm_res.get("location_tier")
+        tenant = llm_res.get("tenant_profile")
+        
+        if tier or tenant:
+             st.markdown("---") # Divider
+             t_c1, t_c2 = st.columns(2)
+             if tier: 
+                 t_c1.markdown(f"🏷️ **Location Tier:** {tier}")
+             if tenant:
+                 t_c2.markdown(f"👥 **Tenant Profile:** {tenant}")
+             st.markdown("---")
+
         # Helper to Bold Numbers/Percentages
         import re
         def bold_numbers(text):

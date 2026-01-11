@@ -258,6 +258,8 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
         analysis_schema = {
             "type": "OBJECT",
             "properties": {
+                "location_tier": {"type": "STRING", "description": "Class A, B, or C neighborhood"},
+                "tenant_profile": {"type": "STRING", "description": "Who is likely to rent here?"},
                 "highlights": {
                     "type": "ARRAY", 
                     "items": {"type": "STRING"}
@@ -282,7 +284,7 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
                     }
                 }
             },
-            "required": ["highlights", "risks", "score", "investment_strategy"]
+            "required": ["highlights", "risks", "score", "investment_strategy", "location_tier", "tenant_profile"]
         }
         
         # Configure model with valid generation config
@@ -330,30 +332,44 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
         """
 
         prompt = f"""
-        You are a real estate investment expert. Analyze the following location data for "{address}".
+        # Role Definition
+        You are a Senior Real Estate Investment Analyst with over 20 years of experience. Your expertise is in residential rental properties (long-term buy-and-hold). Your priority is risk management and ROI, not sales.
+
+        # Objective
+        Generate a rigorous, objective location analysis for "{address}". Help the investor make a rational decision based on data and local market logic.
+
+        # Analysis Guidelines
+        1. **Tone:** Professional, objective, critical, and data-driven. Use analytical terms (e.g., "market volatility," "rental demand").
+        2. **Data Focus:** Base analysis on provided POI and Census data.
+        3. **Balanced View:** Provide both Pros and Cons. Look hard for downsides.
         
+        # Output Structure (Mapped to JSON):
+        1. **Location Tier:** Class A, B, or C.
+        2. **Tenant Profile Prediction:** Who is likely to rent here?
+        3. **Key Advantages (Pros):** -> 'highlights'
+        4. **Risk Factors (Cons):** -> 'risks'
+        5. **Investment Verdict:** -> 'investment_strategy'
+
         USER PRIORITIES (Weights 0-100):
         {weight_str}
         {prefs_section}
-        Adjust your 'score', 'highlights', and 'risks' based on these priorities.
         
         INPUT DATA:
         - POI Data (Sample): {str(poi_data)[:1500]}...
         - Census Data (Provided): {census_data}
+        - State Benchmarks: {benchmarks['state_name']} Income ${benchmarks['state_income']:,}
+        - National Income: ${benchmarks['us_income']:,}
         
         INSTRUCTIONS:
-        1. PREFERENCE CHECK: If 'USER PREFERENCES CONTEXT' is provided, cross-reference it with the INPUT DATA. If a conflict is found (e.g. user dislikes highway, property is close), you MUST include a specific warning in 'risks'.
-        2. If 'Census Data' is missing, empty, or invalid, you MUST ESTIMATE the 'estimated_census' fields (Income, Education, Density) based on the address location.
-        3. If 'Census Data' is provided, you can just mirror it in 'estimated_census' or refine it.
-        4. Provide 'highlights' (Max 4, max {config.get("bullet_word_limit", 15)} words/bullet), 'risks' (Max 3, max {config.get("bullet_word_limit", 15)} words/bullet), 'score' (0-100), and 'investment_strategy' (Max {config.get("strategy_word_limit", 50)} words).
-        
-        CRITICAL SCORING RULES:
-        - If a User Preference is violated, penalize the "score" by 10-25 points depending on severity.
-        - You MUST add a specific item to 'highlights' explaining this penalty: "⚠️ Score Penalty (-XX pts): Conflict with preference [Preference Name] due to [Reason]."
-        
-        CONTEXTUAL BENCHMARKS:
-        State ({benchmarks['state_name']}) Income: ${benchmarks['state_income']:,}
-        National Income: ${benchmarks['us_income']:,}
+        1. PREFERENCE CHECK: If 'USER PREFERENCES CONTEXT' is provided, cross-reference it with the INPUT DATA. If a conflict is found, include a specific warning in 'risks'.
+        2. FILL JSON FIELDS:
+           - 'location_tier': Class rating.
+           - 'tenant_profile': Description of likely tenants.
+           - 'highlights': List of advantages.
+           - 'risks': List of risks (including preference alerts).
+           - 'score': 0-100 rating based on investment suitability (Class A=80+, C=40-60).
+           - 'investment_strategy': The "Verdict".
+           - 'estimated_census': Estimate if missing.
         """
         
         def _generate():
