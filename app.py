@@ -939,6 +939,12 @@ with col3:
             
         m = folium.Map(location=[center_lat, center_lon], zoom_start=14, prefer_canvas=True)
         
+        # DEBUG: Show POI Data
+        with st.expander("Debug Map Data"):
+            st.write(f"POIs Found: {len(st.session_state.pois)}")
+            if st.session_state.pois:
+                st.write(st.session_state.pois[0])
+
         # 1. Target Property (Red Star)
         folium.Marker(
             [center_lat, center_lon],
