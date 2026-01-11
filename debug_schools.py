@@ -16,9 +16,8 @@ def test_supabase():
         print("Testing SELECT from Public_School_Location...")
         # Just select 1 row to see if it works
         resp = supabase.table("Public_School_Location").select("*", count="exact").limit(1).execute()
-        print(f"Select Success. Count: {resp.count}")
-        if resp.data:
-            print(f"Sample Row: {resp.data[0]}")
+        print(f"Sample Row Keys: {list(resp.data[0].keys())}")
+        print(f"Sample Row: {resp.data[0]}")
     except Exception as e:
         print(f"Select FAILED: {e}")
 
