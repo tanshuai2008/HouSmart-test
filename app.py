@@ -15,6 +15,8 @@ from google.oauth2.service_account import Credentials
 import auth # Custom Auth Module
 import supabase_utils
 import data # Geocoding & Data Service
+import map # Map Service
+import map # Map Service
 import llm # LLM Analysis Service
 from config_manager import config_manager as app_config
 
@@ -950,11 +952,11 @@ with col3:
                 st.write(f"Geoapify Config Enabled: {cfg_enable}")
                 
                 # Check Session State
-                val = st.session_state.get("pois")
+                val = st.session_state.get("poi_data")
                 st.write(f"Type of pois: {type(val)}")
                 
                 if val is None:
-                    st.error("POIs is None!")
+                    st.info("ℹ️ No POI data found. Please click 'Start Analysis' to fetch data.")
                 elif isinstance(val, list):
                     st.markdown(f"**Count:** {len(val)}")
                     if len(val) > 0:
@@ -974,22 +976,10 @@ with col3:
             icon=folium.Icon(color="red", icon="star", prefix='fa')
         ).add_to(m)
         
-        # 2. Amenities Data (Simulated)
-        amenities = [
-            {"type": "School", "lat": 37.7760, "lon": -122.4200, "icon": "graduation-cap", "color": "blue"},
-            {"type": "Grocery", "lat": 37.7730, "lon": -122.4180, "icon": "shopping-cart", "color": "green"},
-            {"type": "Gas", "lat": 37.7755, "lon": -122.4230, "icon": "tint", "color": "orange"}, # Tint often used for liquid/gas
-            {"type": "Food", "lat": 37.7740, "lon": -122.4150, "icon": "utensils", "color": "purple"},
-            {"type": "Pharmacy", "lat": 37.7725, "lon": -122.4210, "icon": "medkit", "color": "red"},
-            {"type": "School", "lat": 37.7780, "lon": -122.4170, "icon": "graduation-cap", "color": "blue"},
-        ]
-        
-        for item in amenities:
-            folium.Marker(
-                [item["lat"], item["lon"]],
-                tooltip=item["type"],
-                icon=folium.Icon(color=item["color"], icon=item["icon"], prefix='fa')
-            ).add_to(m)
+        # Use map module to generate map with real POIs
+        pois_to_map = st.session_state.get("poi_data", [])
+        # Overwrite m with the robust map from map.py
+        m, legend_items = map.generate_map(center_lat, center_lon, pois_to_map)
 
         # Render Map
         st_folium(m, height=500, use_container_width=True)
