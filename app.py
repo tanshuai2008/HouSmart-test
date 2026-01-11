@@ -941,9 +941,30 @@ with col3:
         
         # DEBUG: Show POI Data
         with st.expander("Debug Map Data"):
-            st.write(f"POIs Found: {len(st.session_state.pois)}")
-            if st.session_state.pois:
-                st.write(st.session_state.pois[0])
+            try:
+                st.write("--- Debug Start ---")
+                
+                # Check Config
+                cfg_enable = config_manager.get_config().get("enable_geoapify", True)
+                st.write(f"Geoapify Config Enabled: {cfg_enable}")
+                
+                # Check Session State
+                val = st.session_state.get("pois")
+                st.write(f"Type of pois: {type(val)}")
+                
+                if val is None:
+                    st.error("POIs is None!")
+                elif isinstance(val, list):
+                    st.markdown(f"**Count:** {len(val)}")
+                    if len(val) > 0:
+                        st.json(val[0])
+                    else:
+                        st.warning("List is empty.")
+                else:
+                    st.error(f"Unexpected type: {val}")
+                    
+            except Exception as e:
+                st.error(f"Debug Error: {e}")
 
         # 1. Target Property (Red Star)
         folium.Marker(
