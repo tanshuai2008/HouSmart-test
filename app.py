@@ -683,13 +683,23 @@ with col2:
         s_hs, s_bach, s_adv = calc_edu_buckets(s_edu)
         u_hs, u_bach, u_adv = calc_edu_buckets(u_edu)
         
+        # [NEW] Calculate State Income Distribution based on Median
+        s_median = bench_data.get("state_income", 0)
+        s_low, s_mid, s_high = 15, 45, 40 # Defaults
+        if s_median:
+            # National Baseline approx 75k
+            s_factor = s_median / 75000.0
+            s_high = min(80, 40 * s_factor)
+            s_low = max(5, 15 / s_factor)
+            s_mid = max(0, 100 - s_high - s_low)
+        
         df_income = pd.DataFrame({
             "Range": ["<50k", "<50k", "<50k", "50-100k", "50-100k", "50-100k", "100k+", "100k+", "100k+"],
             "Scope": ["Local", "State", "National"] * 3,
             "Value": [
-                v_low_inc, 12, 14,             # <50k
-                v_mid_inc, 40, 38,             # 50-100k
-                v_high_inc, 48, 48             # 100k+
+                v_low_inc, s_low, 14,          # <50k
+                v_mid_inc, s_mid, 38,          # 50-100k
+                v_high_inc, s_high, 48         # 100k+
             ] 
         })
 
@@ -998,17 +1008,11 @@ with col3:
         
         target_icon_html = """
         <div style="display: flex; align-items: center; gap: 6px; margin-right: 10px;">
-            <div style="
-                width: 20px; height: 20px; 
-                background-color: #1A73E8; 
-                border: 2px solid white; 
-                border-radius: 50%; 
-                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-            "></div>
+            <div style="width: 20px; height: 20px; background-color: #1A73E8; border: 2px solid white; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>
             <span style="font-size: 0.9rem; color: #333; font-weight: 500;">Target Property</span>
         </div>
         """
-        legend_html += target_icon_html
+        legend_html += target_icon_html.replace('\n', ' ')
 
         # 2. POI Items from map.generate_map
         if legend_items:
@@ -1016,15 +1020,7 @@ with col3:
                 if label == "Target Property": continue # Already handled
                 
                 # Match .amenity-pin style from map.py
-                pin_style = f"""
-                    width: 24px; height: 24px; 
-                    background-color: white; 
-                    border-radius: 50%; 
-                    border: 2px solid {color}; 
-                    display: flex; alignItems: center; justify-content: center; 
-                    font-size: 14px; 
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
-                """
+                pin_style = f"width: 24px; height: 24px; background-color: white; border-radius: 50%; border: 2px solid {color}; display: flex; alignItems: center; justify-content: center; font-size: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.15);"
                 
                 item_html = f"""
                 <div style="display: flex; align-items: center; gap: 6px; margin-right: 8px;">
@@ -1032,7 +1028,7 @@ with col3:
                     <span style="font-size: 0.85rem; color: #444;">{label}</span>
                 </div>
                 """
-                legend_html += item_html
+                legend_html += item_html.replace('\n', ' ')
              
         legend_html += '</div>'
         st.markdown(legend_html, unsafe_allow_html=True)
@@ -1053,13 +1049,15 @@ with col3:
                 with st.expander(f"🎓 {name} ({dist:.2f} mi)"):
                     st.write(f"Address: {addr}, {city}, {state_code} {s.get('zip','')}")
                     
-                    # Fix: Search by Name + City + State instead of ID
+                    # Fix: Use Google Search for "GreatSchools rating" as it's more robust
+                    # GreatSchools internal search is sensitive to City names (e.g. Allston vs Boston)
                     import urllib.parse
-                    query = f"{name} {city} {state_code}"
+                    query = f"GreatSchools rating {name} {city} {state_code}"
                     q_enc = urllib.parse.quote(query)
                     
-                    gs_url = f"https://www.greatschools.org/search/search.page?q={q_enc}"
-                    st.markdown(f"[View GreatSchools Rating ↗]({gs_url})")
+                    # Google Search Link
+                    gs_url = f"https://www.google.com/search?q={q_enc}"
+                    st.markdown(f"[View GreatSchools Rating (Google) ↗]({gs_url})")
         else:
              st.info("No schools found within 3 miles (or DB connection skipped).")
 
