@@ -984,21 +984,57 @@ with col3:
         # Render Map
         st_folium(m, height=500, use_container_width=True)
 
-    # Card F: Legend (Custom HTML below map or reliance on Icons)
+# Card F: Legend (Dynamic based on Map)
     with st.container(border=True):
         st.markdown("#### Map Legend")
-        legend_html = """
-        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-            <div style="display: flex; align-items: center; gap: 5px;"><span style="color: #d32f2f;">★</span> Target Property</div>
-            <div style="display: flex; align-items: center; gap: 5px;"><i class="fa fa-graduation-cap" style="color: blue;"></i> Schools</div>
-            <div style="display: flex; align-items: center; gap: 5px;"><i class="fa fa-shopping-cart" style="color: green;"></i> Grocery</div>
-            <div style="display: flex; align-items: center; gap: 5px;"><i class="fa fa-tint" style="color: orange;"></i> Gas</div>
-            <div style="display: flex; align-items: center; gap: 5px;"><i class="fa fa-utensils" style="color: purple;"></i> Food</div>
-            <div style="display: flex; align-items: center; gap: 5px;"><i class="fa fa-medkit" style="color: red;"></i> Pharmacy</div>
+        
+        # Build dynamic HTML from legend_items
+        legend_html = '<div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">'
+        
+        # 1. Target Property (Always add if not present, though map.py might not return it in items)
+        # map.py uses specific styles. We recreate the "Target Pin" style in CSS, but here we just need a visual representation.
+        # Target Pin CSS in map.py: blue bg, white border, pulse. 
+        # For legend, we can just use a static blue circle with white border.
+        
+        target_icon_html = """
+        <div style="display: flex; align-items: center; gap: 6px; margin-right: 10px;">
+            <div style="
+                width: 20px; height: 20px; 
+                background-color: #1A73E8; 
+                border: 2px solid white; 
+                border-radius: 50%; 
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            "></div>
+            <span style="font-size: 0.9rem; color: #333; font-weight: 500;">Target Property</span>
         </div>
-        <!-- Load FontAwesome for the legend icons if not already loaded by Folium/Streamlit context (Folium loads it in iframe, but this is outside) -->
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
         """
+        legend_html += target_icon_html
+
+        # 2. POI Items from map.generate_map
+        if legend_items:
+            for label, (emoji, color) in legend_items.items():
+                if label == "Target Property": continue # Already handled
+                
+                # Match .amenity-pin style from map.py
+                pin_style = f"""
+                    width: 24px; height: 24px; 
+                    background-color: white; 
+                    border-radius: 50%; 
+                    border: 2px solid {color}; 
+                    display: flex; alignItems: center; justify-content: center; 
+                    font-size: 14px; 
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+                """
+                
+                item_html = f"""
+                <div style="display: flex; align-items: center; gap: 6px; margin-right: 8px;">
+                    <div style="{pin_style}">{emoji}</div> 
+                    <span style="font-size: 0.85rem; color: #444;">{label}</span>
+                </div>
+                """
+                legend_html += item_html
+             
+        legend_html += '</div>'
         st.markdown(legend_html, unsafe_allow_html=True)
 
     # Card G: Nearby Schools [NEW]
@@ -1011,13 +1047,19 @@ with col3:
                 dist = s.get('dist_miles', 0)
                 name = s.get('name', 'Unknown School')
                 addr = s.get('address', '')
-                nces = s.get('nces_id')
+                city = s.get('city', '')
+                state_code = s.get('state', '')
                 
                 with st.expander(f"🎓 {name} ({dist:.2f} mi)"):
-                    st.write(f"Address: {addr}, {s.get('city','')}, {s.get('state','')} {s.get('zip','')}")
-                    if nces:
-                        gs_url = f"https://www.greatschools.org/search/search.page?q={nces}"
-                        st.markdown(f"[View GreatSchools Rating ↗]({gs_url})")
+                    st.write(f"Address: {addr}, {city}, {state_code} {s.get('zip','')}")
+                    
+                    # Fix: Search by Name + City + State instead of ID
+                    import urllib.parse
+                    query = f"{name} {city} {state_code}"
+                    q_enc = urllib.parse.quote(query)
+                    
+                    gs_url = f"https://www.greatschools.org/search/search.page?q={q_enc}"
+                    st.markdown(f"[View GreatSchools Rating ↗]({gs_url})")
         else:
              st.info("No schools found within 3 miles (or DB connection skipped).")
 
