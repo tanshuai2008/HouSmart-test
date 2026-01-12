@@ -3,5 +3,12 @@
     "temperature": 0.7,
     "customized_scoring_method": false,
     "cache_ttl_hours": 240,
-    "enable_geoapify": true
+    "enable_daily_limit": true,
+    "whitelist_emails": [],
+    "enable_geoapify": true,
+    "enable_rentcast": true,
+    "enable_census": true,
+    "enable_llm": true,
+    "strategy_word_limit": 100,
+    "bullet_word_limit": 15
 }
