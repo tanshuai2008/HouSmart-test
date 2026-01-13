@@ -250,7 +250,7 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
 
     # Handle short names vs full names
     if not model_name.startswith('models/'):
-        pass 
+        model_name = f"models/{model_name}" 
         
     try:
         # Define Schema for Structured Output

@@ -31,7 +31,7 @@ config = config_manager.get_config()
 with st.form("settings_form"):
     st.subheader("🤖 Model Settings")
     
-    model_options = [
+        "gemini-3-flash",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite", 
@@ -41,7 +41,7 @@ with st.form("settings_form"):
     ]
     
     # Handle case where current config model is not in options
-    current_model = config.get("model_name", "gemini-2.5-flash")
+    current_model = config.get("model_name", "gemini-3-flash")
     if current_model not in model_options:
          model_options.append(current_model)
     
@@ -169,6 +169,10 @@ with st.form("settings_form"):
         
         if config_manager.save_config(new_config):
             st.success("Configuration saved successfully!")
+            
+            # [FIX] Force reload of config manager cache
+            config_manager.get_config() 
+            
             st.json(new_config)
             time.sleep(1) 
             st.rerun()

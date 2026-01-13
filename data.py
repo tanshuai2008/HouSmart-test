@@ -401,6 +401,8 @@ def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key
         "limit": 10   # Fetch more candidates to sort
     }
     
+    print(f"DEBUG: RentCast Params: {params}")
+    
     headers = {
         "accept": "application/json",
         "X-Api-Key": api_key

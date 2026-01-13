@@ -281,13 +281,13 @@ with col1:
         # Using [1, 1, 3] to give even more room to the last column
         c_b1, c_b2, c_b3 = st.columns([1, 1, 3])
         with c_b1:
-            st.number_input("Bed", value=2, min_value=0)
+            st.number_input("Bed", value=2, min_value=0, key="input_bed")
         with c_b2:
-            st.number_input("Bath", value=2, min_value=0)
+            st.number_input("Bath", value=2, min_value=0, key="input_bath")
         with c_b3:
-            st.number_input("Sqft", value=1200, step=50, max_value=99999) # Increased max value and column width
+            st.number_input("Sqft", value=1200, step=50, max_value=99999, key="input_sqft") # Increased max value and column width
             
-        st.selectbox("Property Type", ["Single Family", "Townhouse", "Condo", "Apartment"])
+        st.selectbox("Property Type", ["Single Family", "Townhouse", "Condo", "Apartment"], key="input_property_type")
         # Limit Check Logic
         # Limit Check Logic
         app_config_data = app_config.get_config()
@@ -390,7 +390,13 @@ if st.session_state.processing:
         st.session_state.census_data = census_data # Persist
         
         # 4. RentCast
-        rent_data = data.get_rentcast_data(addr_to_geocode, 2, 2, 1200, "Single Family", rentcast_key)
+        # Get user inputs for specs
+        u_bed = st.session_state.get("input_bed", 2)
+        u_bath = st.session_state.get("input_bath", 2)
+        u_sqft = st.session_state.get("input_sqft", 1200)
+        u_prop = st.session_state.get("input_property_type", "Single Family")
+        
+        rent_data = data.get_rentcast_data(addr_to_geocode, u_bed, u_bath, u_sqft, u_prop, rentcast_key)
         if rent_data:
             count_rentcast += 1
         st.session_state.rent_data = rent_data
