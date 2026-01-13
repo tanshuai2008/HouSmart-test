@@ -269,7 +269,8 @@ with col1:
         if final_user_email:
             usage_count = get_daily_usage(final_user_email)
             # Move up by 10px
-            st.markdown(f"<div style='margin-top: -10px; font-size: 0.8rem; color: #5F6368;'>Free Trial in past 24h: {usage_count}/3</div>", unsafe_allow_html=True)
+            limit_count = app_config.get_config().get("daily_limit_count", 3)
+            st.markdown(f"<div style='margin-top: -10px; font-size: 0.8rem; color: #5F6368;'>Free Trial in past 24h: {usage_count}/{limit_count}</div>", unsafe_allow_html=True)
  
  
     # Card B: Property Details
@@ -311,12 +312,14 @@ with col1:
         elif getattr(current_email, "lower", lambda: "")().strip() in whitelist:
              limit_reached = False
         else:
-            if usage >= 3:
+            limit_count = app_config_data.get("daily_limit_count", 3)
+            if usage >= limit_count:
                 limit_reached = True
         
         btn_label = "Start Analysis"
         if limit_reached:
-            btn_label = "Daily Limit Reached (3/3)"
+            limit_count = app_config_data.get("daily_limit_count", 3)
+            btn_label = f"Daily Limit Reached ({usage}/{limit_count})"
             
         if st.button(btn_label, disabled=st.session_state.processing or limit_reached, on_click=start_processing):
             # Callback handles state

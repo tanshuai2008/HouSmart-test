@@ -11,6 +11,7 @@ DEFAULT_CONFIG = {
     "customized_scoring_method": False,
     "cache_ttl_hours": 240,
     "enable_daily_limit": True,
+    "daily_limit_count": 3,
     "whitelist_emails": [],
     "enable_geoapify": True,
     "enable_rentcast": True,

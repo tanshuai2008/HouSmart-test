@@ -118,11 +118,21 @@ with st.form("settings_form"):
 
     st.subheader("🛡️ User Restrictions")
     
-    enable_daily_limit = st.toggle(
-        "Enable Daily Usage Limit (3 Queries/Day)",
-        value=config.get("enable_daily_limit", True),
-        help="If disabled, users can query unlimited times."
-    )
+    col_u1, col_u2 = st.columns([2, 1])
+    with col_u1:
+        enable_daily_limit = st.toggle(
+            "Enable Daily Usage Limit",
+            value=config.get("enable_daily_limit", True),
+            help="If disabled, users can query unlimited times."
+        )
+    with col_u2:
+        daily_limit_count = st.number_input(
+            "Max Queries/Day",
+            min_value=1,
+            max_value=1000,
+            value=int(config.get("daily_limit_count", 3)),
+            disabled=not enable_daily_limit
+        )
     
     # Whitelist input
     current_whitelist = config.get("whitelist_emails", [])
@@ -159,6 +169,7 @@ with st.form("settings_form"):
             "customized_scoring_method": customized_scoring_method,
             "cache_ttl_hours": cache_ttl,
             "enable_daily_limit": enable_daily_limit,
+            "daily_limit_count": daily_limit_count,
             "whitelist_emails": final_whitelist,
             "enable_geoapify": enable_geoapify,
             "enable_rentcast": enable_rentcast,
