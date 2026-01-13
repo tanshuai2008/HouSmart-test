@@ -6,7 +6,7 @@ from typing import Dict, Any
 CONFIG_FILE = "config.json"
 
 DEFAULT_CONFIG = {
-    "model_name": "gemini-3-flash",
+    "model_name": "gemini-3.0-flash",
     "temperature": 0.7,
     "customized_scoring_method": False,
     "cache_ttl_hours": 240,
