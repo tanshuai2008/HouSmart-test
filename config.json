@@ -1,5 +1,5 @@
 {
-    "model_name": "gemini-3.0-flash",
+    "model_name": "gemini-2.5-flash",
     "temperature": 0.7,
     "customized_scoring_method": false,
     "cache_ttl_hours": 240,
