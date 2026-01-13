@@ -31,6 +31,7 @@ config = config_manager.get_config()
 with st.form("settings_form"):
     st.subheader("🤖 Model Settings")
     
+    model_options = [
         "gemini-3-flash",
         "gemini-2.5-pro",
         "gemini-2.5-flash",
