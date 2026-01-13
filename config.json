@@ -1,5 +1,5 @@
 {
-    "model_name": "gemini-2.5-flash",
+    "model_name": "gemini-3-flash",
     "temperature": 0.7,
     "customized_scoring_method": false,
     "cache_ttl_hours": 240,
@@ -9,6 +9,6 @@
     "enable_rentcast": true,
     "enable_census": true,
     "enable_llm": true,
-    "strategy_word_limit": 100,
-    "bullet_word_limit": 15
+    "strategy_word_limit": 150,
+    "bullet_word_limit": 30
 }
