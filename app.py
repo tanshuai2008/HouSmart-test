@@ -276,7 +276,16 @@ with col1:
     # Card B: Property Details
     with st.container(border=True):
         st.markdown("### Property Details")
-        st.text_input("Address", "123 Market St, San Francisco, CA", key="address_input")
+        addr_input = st.text_input("Address", "123 Market St, San Francisco, CA", key="address_input")
+        
+        # [Validation] Check for street number
+        is_addr_valid_format = False
+        if addr_input:
+            # Check if starts with a digit
+            if re.match(r"^\d+", addr_input.strip()):
+                is_addr_valid_format = True
+            else:
+                st.caption(":warning: Please include a street number (e.g., '123 Main St').")
         
         # Adjusted columns to give Sqft more space (5 digits)
         # Using [1, 1, 3] to give even more room to the last column
@@ -321,7 +330,7 @@ with col1:
             limit_count = app_config_data.get("daily_limit_count", 3)
             btn_label = f"Daily Limit Reached ({usage}/{limit_count})"
             
-        if st.button(btn_label, disabled=st.session_state.processing or limit_reached, on_click=start_processing):
+        if st.button(btn_label, disabled=st.session_state.processing or limit_reached or not is_addr_valid_format, on_click=start_processing):
             # Callback handles state
             pass
 
