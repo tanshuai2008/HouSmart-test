@@ -826,7 +826,7 @@ with col2:
         
             # Logic for Education Bars (Subtraction for Benchmarks)
             # Adv-Degree = Adv+
-            with st.container(border=True):
+    with st.container(border=True):
         if "census_data" in st.session_state and st.session_state.census_data:
             # Use shared visualization logic
             # Pass user input address for state detection fallback
