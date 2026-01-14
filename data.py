@@ -246,7 +246,9 @@ class CensusDataService:
         }
         
         try:
+            print(f"DEBUG: Fetching ACS Data for State:{state} County:{county} Tract:{tract} BG:{bg}")
             r = requests.get(self.acs_base_url, params=params)
+            print(f"DEBUG: ACS Response Code: {r.status_code}")
             if r.status_code == 200:
                 # Response is list of lists. Row 0 = Headers, Row 1 = Data
                 rows = r.json()
