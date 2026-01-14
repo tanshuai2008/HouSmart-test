@@ -14,15 +14,11 @@ import json
 CACHE_DIR = "analysis_cache"
 
 def log_debug(msg):
-
-# Map state FIPS to state names for benchmark lookup if needed
-# (Or we can reverse look up from state_data if we had FIPS mapping, 
-# but for now let's hope we rely on the address or simple mapping if needed)
-# Actually, the Census Geocoder returns State Name usually.
-
-
-    with open("debug_log.txt", "a") as f:
-        f.write(f"{str(msg)}\n")
+    try:
+        with open("debug_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now()}: {str(msg)}\n")
+    except Exception:
+        pass
 
 def get_coordinates(address, api_key):
     """
