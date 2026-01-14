@@ -435,11 +435,12 @@ if st.session_state.processing:
             count_rentcast += 1
         st.session_state.rent_data = rent_data
 
-        # 4.1 RentCast Value AVM
-        value_data = data.get_rentcast_value(addr_to_geocode, u_bed, u_bath, u_sqft, u_prop, rentcast_key)
-        if value_data:
-             count_rentcast += 1
-        st.session_state.rent_value_data = value_data
+
+        # 4.1 RentCast Value AVM - DISABLED PER REQUEST
+        # value_data = data.get_rentcast_value(addr_to_geocode, u_bed, u_bath, u_sqft, u_prop, rentcast_key)
+        # if value_data:
+        #      count_rentcast += 1
+        st.session_state.rent_value_data = None # value_data
         
         # 4b. Schools (Supabase) [NEW]
         sp_url = st.secrets.get("SUPABASE_URL")
@@ -607,7 +608,6 @@ if st.session_state.processing:
             <h3>Address: {addr}</h3>
             <p><strong>AI Score:</strong> {score}/100</p>
             <p><strong>Estimated Rent:</strong> ${est_rent:,}</p>
-            <p><strong>Estimated Value:</strong> ${est_val:,}</p>
             <hr>
             <h4>Investment Strategy</h4>
             <p>{strategy}</p>
@@ -879,23 +879,7 @@ with col2:
                     # Formatting "Estimated Monthly Rent" with Bolds? User said "AI summary... numbers bold".
                     # Assume Rent Metrics standard.
             
-                    # SPLIT INTO 2 COLUMNS: Rent | Value
-                    rc_c1, rc_c2 = st.columns(2)
-            
-                    with rc_c1:
-                        st.metric("Estimated Monthly Rent", f"${est_rent:,}")
-            
-                    with rc_c2:
-                        # Check for Value Data
-                        r_val_data = st.session_state.get("rent_value_data", {})
-                        if r_val_data:
-                            est_val = r_val_data.get("estimated_value", 0)
-                            if est_val > 0:
-                                st.metric("Estimated Value", f"${est_val:,}")
-                            else:
-                                st.metric("Estimated Value", "N/A")
-                        else:
-                            st.metric("Estimated Value", "N/A")
+                    st.metric("Estimated Monthly Rent", f"${est_rent:,}")
                 
                     if comps:
                         st.markdown("#### 🏘️ Comparable Listings")
