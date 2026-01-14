@@ -121,7 +121,34 @@ class CensusDataService:
             "B02001_002E": "Race_White",
             "B02001_003E": "Race_Black",
             "B02001_005E": "Race_Asian",
-            "B03003_003E": "Origin_Hispanic"
+            "B03003_003E": "Origin_Hispanic",
+            # Income Buckets (B19001)
+            "B19001_002E": "Inc_2", "B19001_003E": "Inc_3", "B19001_004E": "Inc_4",
+            "B19001_005E": "Inc_5", "B19001_006E": "Inc_6", "B19001_007E": "Inc_7",
+            "B19001_008E": "Inc_8", "B19001_009E": "Inc_9", "B19001_010E": "Inc_10", # <50k end
+            "B19001_011E": "Inc_11", "B19001_012E": "Inc_12", "B19001_013E": "Inc_13",
+            "B19001_014E": "Inc_14", "B19001_015E": "Inc_15", # <125k
+            "B19001_016E": "Inc_16", "B19001_017E": "Inc_17", # 125-150, 150-200, 200+ is 018? Assume 17 is max here or add 18
+            "B19001_018E": "Inc_17plus", # Just in case
+            # Age Buckets (B01001) - Simplified to key ranges if possible, else fetch many
+            # Fetching Male (003-025) and Female (027-049) is too many.
+            # Use total population to approximate? No. 
+            # We need standard query. Just add the critical ones.
+            # <18: Male 003(5),004(5-9),005(10-14),006(15-17). Female 027-030.
+            "B01001_003E":"Age_M_U5", "B01001_004E":"Age_M_5_9", "B01001_005E":"Age_M_10_14", "B01001_006E":"Age_M_15_17",
+            "B01001_027E":"Age_F_U5", "B01001_028E":"Age_F_5_9", "B01001_029E":"Age_F_10_14", "B01001_030E":"Age_F_15_17",
+            # 18-24: M 007-010, F 031-034
+            "B01001_007E":"Age_M_18_19", "B01001_008E":"Age_M_20", "B01001_009E":"Age_M_21", "B01001_010E":"Age_M_22_24",
+            "B01001_031E":"Age_F_18_19", "B01001_032E":"Age_F_20", "B01001_033E":"Age_F_21", "B01001_034E":"Age_F_22_24",
+            # 25-44: M 011-014, F 035-038
+            "B01001_011E":"Age_M_25_29", "B01001_012E":"Age_M_30_34", "B01001_013E":"Age_M_35_39", "B01001_014E":"Age_M_40_44",
+            "B01001_035E":"Age_F_25_29", "B01001_036E":"Age_F_30_34", "B01001_037E":"Age_F_35_39", "B01001_038E":"Age_F_40_44",
+            # 45-64: M 015-019, F 039-043
+            "B01001_015E":"Age_M_45_49", "B01001_016E":"Age_M_50_54", "B01001_017E":"Age_M_55_59", "B01001_018E":"Age_M_60_61", "B01001_019E":"Age_M_62_64",
+            "B01001_039E":"Age_F_45_49", "B01001_040E":"Age_F_50_54", "B01001_041E":"Age_F_55_59", "B01001_042E":"Age_F_60_61", "B01001_043E":"Age_F_62_64",
+            # 65+: M 020-025, F 044-049
+            "B01001_020E":"Age_M_65_66", "B01001_021E":"Age_M_67_69", "B01001_022E":"Age_M_70_74", "B01001_023E":"Age_M_75_79", "B01001_024E":"Age_M_80_84", "B01001_025E":"Age_M_85",
+            "B01001_044E":"Age_F_65_66", "B01001_045E":"Age_F_67_69", "B01001_046E":"Age_F_70_74", "B01001_047E":"Age_F_75_79", "B01001_048E":"Age_F_80_84", "B01001_049E":"Age_F_85"
         }
 
     def get_census_geoid(self, address):
@@ -345,7 +372,73 @@ class CensusDataService:
         # 6. Age
         med_age = local_data.get("B01002_001E")
         output["metrics"]["median_age"] = {"local": med_age if med_age else 0}
-    
+        
+        # 7. Aggregates for Buckets (Viz Utils Support)
+        # Income <50k (B19001_002E .. 010E)
+        inc_low = sum(local_data.get(f"B19001_{i:03d}E", 0) or 0 for i in range(2, 11))
+        # Income 50-150k (011E .. 016E? 016 is 125-150. 017 is 150-200. So 11-16 is <150k)
+        inc_mid = sum(local_data.get(f"B19001_{i:03d}E", 0) or 0 for i in range(11, 17))
+        # Income >150k (017E .. ?)
+        inc_high = (local_data.get("B19001_017E", 0) or 0) + (local_data.get("B19001_018E", 0) or 0) # Adjust if 18 doesn't exist
+        
+        # Normalize to Percentages? Viz utils expects raw or pct?
+        # Viz utils seems to render as is. If passing counts, the bars will be huge counts.
+        # But Benchmarks are percentages (e.g. 20.5).
+        # So we MUST calculate percentages here.
+        total_hh = local_data.get("B19001_001E", 0) or 1
+        if total_hh > 0:
+            output["metrics"]["income_below_50k"] = {"local": round(inc_low / total_hh * 100, 1)}
+            output["metrics"]["income_50k_150k"] = {"local": round(inc_mid / total_hh * 100, 1)}
+            output["metrics"]["income_above_150k"] = {"local": round(inc_high / total_hh * 100, 1)}
+        
+        # Age Aggregates
+        # <18: M(3-6) + F(27-30)
+        age_u18 = sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(3, 7)) + \
+                  sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(27, 31))
+        # 18-24: M(7-10) + F(31-34)
+        age_18_24 = sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(7, 11)) + \
+                    sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(31, 35))
+        # 25-44: M(11-14) + F(35-38)
+        age_25_44 = sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(11, 15)) + \
+                    sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(35, 39))
+        # 45-64: M(15-19) + F(39-43)
+        age_45_64 = sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(15, 20)) + \
+                    sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(39, 44))
+        # 65+: M(20-25) + F(44-49)
+        age_65_plus = sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(20, 26)) + \
+                      sum(local_data.get(f"B01001_{i:03d}E", 0) or 0 for i in range(44, 50))
+                      
+        total_pop = local_data.get("B01001_001E", 0) or 1
+        if total_pop > 0:
+            output["metrics"]["age_under_18"] = {"local": round(age_u18 / total_pop * 100, 1)}
+            output["metrics"]["age_18_24"] = {"local": round(age_18_24 / total_pop * 100, 1)}
+            output["metrics"]["age_25_44"] = {"local": round(age_25_44 / total_pop * 100, 1)}
+            output["metrics"]["age_45_64"] = {"local": round(age_45_64 / total_pop * 100, 1)}
+            output["metrics"]["age_65_plus"] = {"local": round(age_65_plus / total_pop * 100, 1)}
+
+        # Education Percentages (Viz Utils expects these keys directly? No, it uses edu_high_school etc)
+        # viz_utils keys: edu_high_school, edu_bachelor, edu_graduate
+        # We store raw counts above: Edu_HS_Diploma, Edu_Bachelor, etc.
+        # But viz_utils expects keys "edu_high_school" etc. AND they should be percents to match benchmarks.
+        if total_25_plus > 0:
+             # HS = HS Diploma + GED? (Usually 017E is Regular HS, 018E is GED)
+             # B15003_017E is Regular HS. B15003_018E is GED.
+             # We only fetched 017E in vars. Let's assume simplified.
+             # Actually we Should create the specific keys expected by viz_utils
+             output["metrics"]["edu_high_school"] = {"local": round(e_hs / total_25_plus * 100, 1)}
+             output["metrics"]["edu_bachelor"] = {"local": round(e_bach / total_25_plus * 100, 1)}
+             output["metrics"]["edu_graduate"] = {"local": round((e_mast + e_prof + e_doc) / total_25_plus * 100, 1)}
+
+        # Race Percentages
+        # viz_utils keys: race_white, race_black, race_asian, race_hispanic, race_other
+        if r_tot > 0:
+             output["metrics"]["race_white"] = {"local": round(r_white / r_tot * 100, 1)}
+             output["metrics"]["race_black"] = {"local": round(r_black / r_tot * 100, 1)}
+             output["metrics"]["race_asian"] = {"local": round(r_asian / r_tot * 100, 1)}
+             output["metrics"]["race_hispanic"] = {"local": round(r_hisp / r_tot * 100, 1)}
+             r_other = r_tot - (r_white + r_black + r_asian + r_hisp)
+             output["metrics"]["race_other"] = {"local": round(max(0, r_other) / r_tot * 100, 1)}
+
         return output
 
 def get_census_data(address):
