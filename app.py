@@ -989,8 +989,8 @@ with col2:
                 else:
                      st.info("Rental Analysis: No data available.")
 
-        # 2. AI INSIGHT SUMMARY (Moved per user request)
-        with st.container(border=True):
+            # 2. AI INSIGHT SUMMARY (Moved per user request)
+            with st.container(border=True):
                 # Header with Score
                 c_head, c_score = st.columns([3, 1])
                 with c_head:
