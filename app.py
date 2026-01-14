@@ -470,6 +470,8 @@ if st.session_state.processing:
             # --- DATA INTEGRATION COMPLETE ---
         # --- LOGGING ---
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        final_email = st.session_state.google_user.get("email") if st.session_state.google_user else st.session_state.get("user_email_input", "unknown")
+        addr = st.session_state.get("address_input", "Unknown Address")
 
         try:
             # 1. Google Sheet Logging
@@ -507,13 +509,6 @@ if st.session_state.processing:
 
                 
                 # Log Data to GSheet
-                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-                final_email = st.session_state.google_user.get("email") if st.session_state.google_user else st.session_state.get("user_email_input", "unknown")
-                
-                # Address
-                addr = st.session_state.get("address_input", "123 Market St, San Francisco, CA")
                 
                 # Token Usage
                 p_tok = 0
