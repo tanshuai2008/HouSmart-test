@@ -285,8 +285,8 @@ class CensusDataService:
         Step 3: Compare local results with State Benchmarks.
         Returns standardized structure: { key: { 'local': val, 'state': val, 'national': val } }
         """
-        if not local_data:
-            return None
+        if local_data is None:
+            local_data = {}
 
         # FIPS to Name Mapping
         FIPS_TO_NAME = {
@@ -470,6 +470,8 @@ def get_census_data(address, geo_key=None):
             
         # 2. Get Data
         acs_data = service.get_acs_data(geo_data)
+        if acs_data is None:
+             print("DEBUG: ACS Data is None. Proceeding with Benchmarks only.")
         log_debug(f"ACS Result Count: {len(acs_data) if acs_data else 0}")
         
         # 3. Compare & Compile
