@@ -835,12 +835,12 @@ with col2:
             
             if charts:
                  r1_c1, r1_c2 = st.columns(2)
-                 with r1_c1: st.plotly_chart(charts["income"], key="chart_inc", width=True)
-                 with r1_c2: st.plotly_chart(charts["age"], key="chart_age", width=True)
+                 with r1_c1: st.plotly_chart(charts["income"], key="chart_inc", use_container_width=True)
+                 with r1_c2: st.plotly_chart(charts["age"], key="chart_age", use_container_width=True)
                 
                  r2_c1, r2_c2 = st.columns(2)
-                 with r2_c1: st.plotly_chart(charts["race"], key="chart_race", width=True)
-                 with r2_c2: st.plotly_chart(charts["education"], key="chart_edu", width=True)
+                 with r2_c1: st.plotly_chart(charts["race"], key="chart_race", use_container_width=True)
+                 with r2_c2: st.plotly_chart(charts["education"], key="chart_edu", use_container_width=True)
             else:
                  st.info("No census charts available.")
 
