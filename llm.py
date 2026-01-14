@@ -44,16 +44,17 @@ def configure_genai(api_keys):
         return True
     return False
 
-def get_cached_analysis(address, weights=None):
+def get_cached_analysis(address, weights=None, rent_data=None):
     """
     Retrieve cached analysis if valid (exists and < 240 hours old).
-    Key is based on hash(address + weights).
+    Key is based on hash(address + weights + rent_data).
     """
     try:
         # Create a unique key based on address and weights
         # Sort weights to ensure consistent hashing key for dicts
         weight_str = json.dumps(weights, sort_keys=True) if weights else "None"
-        key_str = f"{address}_{weight_str}".encode('utf-8')
+        rent_str = json.dumps(rent_data, sort_keys=True) if rent_data else "None"
+        key_str = f"{address}_{weight_str}_{rent_str}".encode('utf-8')
         file_hash = hashlib.md5(key_str).hexdigest()
         filename = os.path.join(CACHE_DIR, f"{file_hash}.pkl")
         
@@ -80,13 +81,14 @@ def get_cached_analysis(address, weights=None):
         return None
     return None
 
-def save_to_cache(address, data, weights=None):
+def save_to_cache(address, data, weights=None, rent_data=None):
     """
     Save analysis result to cache.
     """
     try:
         weight_str = json.dumps(weights, sort_keys=True) if weights else "None"
-        key_str = f"{address}_{weight_str}".encode('utf-8')
+        rent_str = json.dumps(rent_data, sort_keys=True) if rent_data else "None"
+        key_str = f"{address}_{weight_str}_{rent_str}".encode('utf-8')
         file_hash = hashlib.md5(key_str).hexdigest()
         filename = os.path.join(CACHE_DIR, f"{file_hash}.pkl")
         
@@ -202,7 +204,7 @@ def get_available_models():
     except Exception as e:
         return [f"Error listing models: {str(e)}"]
 
-def analyze_location(address, poi_data, census_data, model_name=None, weights=None, user_prefs=None):
+def analyze_location(address, poi_data, census_data, model_name=None, weights=None, user_prefs=None, rent_data=None):
     """
     Analyze the location using Gemini.
     Merged functionality: Estimates Census data if missing, and provides Investment Analysis.
@@ -217,7 +219,20 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
     # Alternative: Disable cache if user_prefs are provided? Or just risk it?
     # Let's bypass cache if user_prefs is present to ensure fresh "Warning" generation.
     if not user_prefs:
-        cached_result = get_cached_analysis(address, weights=weights)
+        # Include rent_data presence in cache key logic implicitly or we should add it
+        # Ideally, differing rent data should yield different analysis.
+        # But if rent data is None in cache, and now we have it, we should re-run?
+        # Let's assume for now valid cache requires exact inputs. 
+        # But `get_cached_analysis` only uses address/weights.
+        # If we add rent data, we must invalidate old cache or just let it expire.
+        # Or better: We update `get_cached_analysis` to check constraints? 
+        # Simpler: If rent_data is provided, skip cache if the cached version didn't have it?
+        # Actually, let's keep it simple: If cache exists, use it. (Assuming stable inputs for same address)
+        # BUT user goal is to "Pass RentCast data to LLM". If we use old cache, we miss it.
+        # So we should probably bypass cache if we have rent_data but cache doesn't?
+        # For this turn, I will just proceed. The file hash is address+weights.
+        # If the user wants to force new analysis with rent data, they might need to clear cache or we rely on TTL.
+        cached_result = get_cached_analysis(address, weights=weights, rent_data=rent_data)
         if cached_result:
             print("Using cached analysis.")
             return cached_result
@@ -359,6 +374,7 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
         - Census Data (Provided): {census_data}
         - State Benchmarks: {benchmarks['state_name']} Income ${benchmarks['state_income']:,}
         - National Income: ${benchmarks['us_income']:,}
+        - Rental Data (RentCast): {rent_data if rent_data else "Not Available"}
         
         INSTRUCTIONS:
         1. PREFERENCE CHECK: If 'USER PREFERENCES CONTEXT' is provided, cross-reference it with the INPUT DATA. If a conflict is found, include a specific warning in 'risks'.
@@ -381,7 +397,7 @@ def analyze_location(address, poi_data, census_data, model_name=None, weights=No
         
         # 2. Save to Cache
         if data and "error" not in data:
-            save_to_cache(address, data, weights=weights)
+            save_to_cache(address, data, weights=weights, rent_data=rent_data)
             
         return data
 

@@ -7,6 +7,11 @@ import state_data
 from config_manager import config_manager
 from supabase import create_client, Client # Ensure supabase is in requirements
 import os
+import hashlib
+import pickle
+import json
+
+CACHE_DIR = "analysis_cache"
 
 def log_debug(msg):
 
@@ -378,17 +383,77 @@ def get_census_data(address):
         log_debug(f"CRITICAL ERROR in get_census_data: {e}")
         return None
 
+
+def get_cached_rentcast(key_data):
+    """
+    Retrieve cached RentCast data.
+    """
+    try:
+        if not os.path.exists(CACHE_DIR):
+            return None
+            
+        # Create hash key
+        key_str = json.dumps(key_data, sort_keys=True).encode('utf-8')
+        file_hash = hashlib.md5(key_str).hexdigest()
+        filename = os.path.join(CACHE_DIR, f"rent_{file_hash}.pkl")
+        
+        if os.path.exists(filename):
+            # Check modification time (TTL: 240 hours / 10 days)
+            mtime = os.path.getmtime(filename)
+            file_time = datetime.datetime.fromtimestamp(mtime)
+            age = datetime.datetime.now() - file_time
+            
+            if age.total_seconds() < 240 * 3600:
+                with open(filename, 'rb') as f:
+                    return pickle.load(f)
+    except Exception as e:
+        print(f"RentCast Cache Read Error: {e}")
+    return None
+
+def save_rentcast_cache(key_data, data):
+    """
+    Save RentCast data to cache.
+    """
+    try:
+        if not os.path.exists(CACHE_DIR):
+            os.makedirs(CACHE_DIR)
+            
+        key_str = json.dumps(key_data, sort_keys=True).encode('utf-8')
+        file_hash = hashlib.md5(key_str).hexdigest()
+        filename = os.path.join(CACHE_DIR, f"rent_{file_hash}.pkl")
+        
+        with open(filename, 'wb') as f:
+            pickle.dump(data, f)
+    except Exception as e:
+        print(f"RentCast Cache Save Error: {e}")
+
 def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key):
     """
     Fetch Rent Estimates and Comparables from RentCast API.
+    Checks Cache First.
     """
     if not config_manager.get_config().get("enable_rentcast", True):
         return None
+
+    # Check Cache
+    cache_key = {
+        "address": address,
+        "bedrooms": bedrooms,
+        "bathrooms": bathrooms,
+        "sqft": sqft,
+        "propertyType": property_type
+    }
+    
+    cached = get_cached_rentcast(cache_key)
+    if cached:
+        print("Using Cached RentCast Data")
+        return cached
 
     if not api_key:
         return None
 
     # RentCast endpoint
+
     url = "https://api.rentcast.io/v1/avm/rent/long-term"
     
     params = {
@@ -485,18 +550,88 @@ def get_rentcast_data(address, bedrooms, bathrooms, sqft, property_type, api_key
             # Take Top 5
             comps_final = comps_sorted[:5]
                 
-            return {
+            result = {
                 "estimated_rent": estimate,
                 "rent_range": rent_range,  # [Low, High]
                 "currency": data.get("currency", "USD"),
                 "comparables": comps_final
             }
             
+            # Save to Cache
+            save_rentcast_cache(cache_key, result)
+            
+            return result
+            
         else:
             print(f"RentCast API Error: {resp.status_code} - {resp.text}")
             
     except Exception as e:
         print(f"RentCast Execution Error: {e}")
+        
+    return None
+
+def get_rentcast_value(address, bedrooms, bathrooms, sqft, property_type, api_key):
+    """
+    Fetch Property Value Estimate (AVM) from RentCast API.
+    Checks Cache First.
+    """
+    if not config_manager.get_config().get("enable_rentcast", True):
+        return None
+
+    # Check Cache
+    cache_key = {
+        "type": "value_avm", # Distinguish from rent
+        "address": address,
+        "bedrooms": bedrooms,
+        "bathrooms": bathrooms,
+        "sqft": sqft,
+        "propertyType": property_type
+    }
+    
+    cached = get_cached_rentcast(cache_key)
+    if cached:
+        print("Using Cached RentCast Value")
+        return cached
+
+    if not api_key:
+        return None
+
+    url = "https://api.rentcast.io/v1/avm/value"
+    
+    params = {
+        "address": address,
+        "bedrooms": bedrooms,
+        "bathrooms": bathrooms,
+        "squareFootage": sqft,
+        "propertyType": property_type
+    }
+    
+    headers = {
+        "accept": "application/json",
+        "X-Api-Key": api_key
+    }
+    
+    try:
+        resp = requests.get(url, params=params, headers=headers)
+        if resp.status_code == 200:
+            data = resp.json()
+            
+            result = {
+                "estimated_value": data.get("price", 0),
+                "value_range": [data.get("priceRangeLow", 0), data.get("priceRangeHigh", 0)],
+                "currency": data.get("currency", "USD")
+            }
+            
+            # Save to Cache
+            save_rentcast_cache(cache_key, result)
+            
+            return result
+            
+        else:
+            print(f"RentCast Value API Error: {resp.status_code} - {resp.text}")
+            
+    except Exception as e:
+        print(f"RentCast Value Execution Error: {e}")
         
     return None
 

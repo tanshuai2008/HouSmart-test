@@ -110,6 +110,13 @@ with st.form("settings_form"):
 
     st.subheader("🛠️ Feature Flags")
     
+    delivery_method = st.selectbox(
+        "Result Delivery Method",
+        options=["Screen", "Email"],
+        index=0 if config.get("delivery_method", "Screen") == "Screen" else 1,
+        help="Screen: Show results immediately. Email: Send result via email only."
+    )
+    
     customized_scoring_method = st.toggle(
         "Enable Customized Scoring Method",
         value=config.get("customized_scoring_method", False),
@@ -163,9 +170,9 @@ with st.form("settings_form"):
         raw_list = whitelist_input.replace(",", "\n").split("\n")
         final_whitelist = [x.strip().lower() for x in raw_list if x.strip()]
         
-        new_config = {
             "model_name": selected_model,
             "temperature": temperature,
+            "delivery_method": delivery_method,
             "customized_scoring_method": customized_scoring_method,
             "cache_ttl_hours": cache_ttl,
             "enable_daily_limit": enable_daily_limit,
