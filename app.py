@@ -469,6 +469,8 @@ if st.session_state.processing:
             
             # --- DATA INTEGRATION COMPLETE ---
         # --- LOGGING ---
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         try:
             # 1. Google Sheet Logging
             sheet = connect_to_gsheet()
