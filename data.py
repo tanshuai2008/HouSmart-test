@@ -199,9 +199,11 @@ class CensusDataService:
         }
         
         try:
+            print(f"DEBUG: Calling FCC API with lat={lat}, lon={lon}")
             r = requests.get(fcc_url, params=params, timeout=5)
             if r.status_code == 200:
                 data = r.json()
+                print(f"DEBUG: FCC Response: {data}")
                 # FCC returns Block FIPS (15 digits). Block Group is first 12 digits.
                 # State (2) + County (3) + Tract (6) + Block (4)
                 fips = data['Block']['FIPS']
@@ -217,7 +219,10 @@ class CensusDataService:
                     "tract": tract,
                     "block_group": block_group
                 }
-        except Exception:
+            else:
+                print(f"DEBUG: FCC API Status {r.status_code}: {r.text}")
+        except Exception as e:
+            print(f"DEBUG: FCC API Exception: {e}")
             pass
             
         return None
