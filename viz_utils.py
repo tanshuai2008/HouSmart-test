@@ -229,20 +229,42 @@ def generate_census_charts(census_data, address_input=""):
     color_map_edu = {"Local": "#EA4335", state_label: "#9AA0A6", "National": "#DADCE0"}
 
     # Generate Figures
-    fig_inc = px.bar(df_income, x="Range", y="Value", color="Scope", barmode="group", title=inc_title, height=250,
-                    color_discrete_map=color_map, labels={"Value": "%"})
+    # Explicit Category Orders to prevent alphabetical sorting
+    order_inc = ["<50k", "50k-150k", ">150k"]
+    order_age = ["<18", "18-24", "25-44", "45-64", "65+"]
+    order_race = ["White", "Hispanic", "Black", "Asian", "Other"]
+    order_edu = ["HighSchool", "Bachelor", "Adv-Degree"]
+
+    fig_inc = px.bar(
+        df_income, x="Range", y="Value", color="Scope", barmode="group", 
+        title=inc_title, height=250, text_auto='.1f',
+        color_discrete_map=color_map, labels={"Value": "%"},
+        category_orders={"Range": order_inc}
+    )
     update_chart_layout(fig_inc)
 
-    fig_age = px.bar(df_age, x="Range", y="Value", color="Scope", barmode="group", title=age_title, height=250,
-                 color_discrete_map=color_map_age, labels={"Value": "%"})
+    fig_age = px.bar(
+        df_age, x="Range", y="Value", color="Scope", barmode="group", 
+        title=age_title, height=250, text_auto='.1f',
+        color_discrete_map=color_map_age, labels={"Value": "%"},
+        category_orders={"Range": order_age}
+    )
     update_chart_layout(fig_age)
 
-    fig_race = px.bar(df_race, x="Group", y="Value", color="Scope", barmode="group", title="Race", height=250,
-                    color_discrete_map=color_map_race, labels={"Value": "%"})
+    fig_race = px.bar(
+        df_race, x="Group", y="Value", color="Scope", barmode="group", 
+        title="Race", height=250, text_auto='.1f',
+        color_discrete_map=color_map_race, labels={"Value": "%"},
+        category_orders={"Group": order_race}
+    )
     update_chart_layout(fig_race)
 
-    fig_edu = px.bar(df_edu, x="Level", y="Value", color="Scope", barmode="group", title="Education", height=250,
-                 color_discrete_map=color_map_edu, labels={"Value": "%"})
+    fig_edu = px.bar(
+        df_edu, x="Level", y="Value", color="Scope", barmode="group", 
+        title="Education", height=250, text_auto='.1f',
+        color_discrete_map=color_map_edu, labels={"Value": "%"},
+        category_orders={"Level": order_edu}
+    )
     update_chart_layout(fig_edu)
 
     return {
