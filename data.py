@@ -97,7 +97,8 @@ def get_poi(address, api_key=None, lat=None, lon=None):
     return pois, lat, lon
 
 class CensusDataService:
-    def __init__(self):
+    def __init__(self, geo_key=None):
+        self.geo_key = geo_key
         self.geocoder_url = "https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress"
         # Use 2022 ACS 5-Year Data (Stable)
         self.acs_base_url = "https://api.census.gov/data/2022/acs/acs5"
@@ -184,7 +185,7 @@ class CensusDataService:
 
         # B. Fallback: Geoapify -> FCC Block API (Good for landmarks/pois)
         log_debug("Fallback: Using Geoapify + FCC API")
-        lat, lon = get_coordinates(address, None) # Uses default if no key, but assume key is likely present or defaulting to NY
+        lat, lon = get_coordinates(address, self.geo_key) # Uses default if no key, but assume key is likely present or defaulting to NY
         
         # If get_coordinates returns default coordinates because of missing key, this might not be accurate for arbitrary input,
         # but better than failing.
@@ -441,7 +442,7 @@ class CensusDataService:
 
         return output
 
-def get_census_data(address):
+def get_census_data(address, geo_key=None):
     """
     Main entry point for App to get Census Data.
     """
@@ -449,15 +450,19 @@ def get_census_data(address):
     try:
         if not config_manager.get_config().get("enable_census", True):
             log_debug("Census API Disabled in Config")
+            print("DEBUG: Census API Disabled in Config")
             return None
 
-        service = CensusDataService()
+        service = CensusDataService(geo_key=geo_key)
         
         # 1. Geocode
+        print(f"DEBUG: Geocoding {address}...")
         geo_data = service.get_census_geoid(address)
         log_debug(f"Geode Result: {geo_data}")
+        print(f"DEBUG: Geocode Result: {geo_data}")
         
         if not geo_data:
+            print("DEBUG: Geocoding Failed. No data returned.")
             return None
             
         # 2. Get Data

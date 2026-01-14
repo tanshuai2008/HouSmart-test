@@ -418,7 +418,7 @@ if st.session_state.processing:
         st.session_state.poi_data = pois # Persist
         
         # 3. Census
-        census_data = data.get_census_data(addr_to_geocode)
+        census_data = data.get_census_data(addr_to_geocode, geo_key=geo_key)
         if census_data: # If None, call failed or disabled
              count_census += 2 # 1 Geocode + 1 Data
         st.session_state.census_data = census_data # Persist
