@@ -170,6 +170,7 @@ with st.form("settings_form"):
         raw_list = whitelist_input.replace(",", "\n").split("\n")
         final_whitelist = [x.strip().lower() for x in raw_list if x.strip()]
         
+        new_config = {
             "model_name": selected_model,
             "temperature": temperature,
             "delivery_method": delivery_method,
