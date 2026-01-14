@@ -919,7 +919,7 @@ with col2:
         if delivery_method_check == "Email" and (not st.session_state.processing or st.session_state.get("delivery_completed")):
             # If not processing (idle or done), hide result cards
             pass
-    else:
+        else:
             # SCREEN MODE or PROCESSING (In processing, we might want to hide result cards until done? 
             # Actually in standard mode we update session state. If "Email", we want to hide THESE specific result cards entirely.)
         
