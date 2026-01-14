@@ -92,6 +92,8 @@ def generate_census_charts(census_data, address_input=""):
     
     # helper
     def safe_parse(v):
+        if isinstance(v, dict): 
+            v = v.get('local', 0)
         if isinstance(v, (int, float)): return float(v)
         if isinstance(v, str):
             clean = v.replace('$', '').replace(',', '').replace('%', '')

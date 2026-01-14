@@ -15,12 +15,11 @@ from google.oauth2.service_account import Credentials
 import auth # Custom Auth Module
 import supabase_utils
 import data # Geocoding & Data Service
-import map # Map Service
-import map # Map Service
-import map # Map Service
-import llm # LLM Analysis Service
-import email_utils # Email Service
-import viz_utils # Visualization Helpers
+import map_service as map # Map Service
+import llm # LLM Service
+import config_manager as app_config
+import email_utils # Email Utils
+import viz_utils # Visualization Utils
 from config_manager import config_manager as app_config
 
 # Page Configuration
