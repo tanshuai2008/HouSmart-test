@@ -25,6 +25,8 @@ def check_email_validity(email_address):
 
 from email.mime.image import MIMEImage
 
+from email.utils import formataddr
+
 def send_analysis_email(to_email, subject, html_content, images=None):
     """
     Sends an email using Gmail SMTP from secrets.
@@ -47,7 +49,9 @@ def send_analysis_email(to_email, subject, html_content, images=None):
         # Create Message - Use 'related' for inline images
         msg = MIMEMultipart("related") 
         msg["Subject"] = subject
-        msg["From"] = smtp_user
+        # Use a friendly Name for the sender
+        msg["From"] = formataddr(("HouSmart AI Assistant", smtp_user))
+
         msg["To"] = to_email
         
         msg_alternative = MIMEMultipart('alternative')
