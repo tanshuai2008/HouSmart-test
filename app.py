@@ -926,149 +926,149 @@ with col2:
             # 1. RENTCAST INTEGRATION (Moved per user request)
             with st.container(border=True):
         
-            # Debug Check
-            if not st.secrets.get("RENTCAST_API_KEY"):
-                 st.error("⚠️ Configuration Error: 'RENTCAST_API_KEY' is missing.")
+                # Debug Check
+                if not st.secrets.get("RENTCAST_API_KEY"):
+                     st.error("⚠️ Configuration Error: 'RENTCAST_API_KEY' is missing.")
         
-            rent_d = st.session_state.get("rent_data", {})
-            if rent_d and "comparables" in rent_d:
-                comps = rent_d["comparables"]
-                est_rent = rent_d.get("estimated_rent", 0)
+                rent_d = st.session_state.get("rent_data", {})
+                if rent_d and "comparables" in rent_d:
+                    comps = rent_d["comparables"]
+                    est_rent = rent_d.get("estimated_rent", 0)
             
-                # Formatting "Estimated Monthly Rent" with Bolds? User said "AI summary... numbers bold".
-                # Assume Rent Metrics standard.
+                    # Formatting "Estimated Monthly Rent" with Bolds? User said "AI summary... numbers bold".
+                    # Assume Rent Metrics standard.
             
-                # SPLIT INTO 2 COLUMNS: Rent | Value
-                rc_c1, rc_c2 = st.columns(2)
+                    # SPLIT INTO 2 COLUMNS: Rent | Value
+                    rc_c1, rc_c2 = st.columns(2)
             
-                with rc_c1:
-                    st.metric("Estimated Monthly Rent", f"${est_rent:,}")
+                    with rc_c1:
+                        st.metric("Estimated Monthly Rent", f"${est_rent:,}")
             
-                with rc_c2:
-                    # Check for Value Data
-                    r_val_data = st.session_state.get("rent_value_data", {})
-                    if r_val_data:
-                        est_val = r_val_data.get("estimated_value", 0)
-                        if est_val > 0:
-                            st.metric("Estimated Value", f"${est_val:,}")
+                    with rc_c2:
+                        # Check for Value Data
+                        r_val_data = st.session_state.get("rent_value_data", {})
+                        if r_val_data:
+                            est_val = r_val_data.get("estimated_value", 0)
+                            if est_val > 0:
+                                st.metric("Estimated Value", f"${est_val:,}")
+                            else:
+                                st.metric("Estimated Value", "N/A")
                         else:
                             st.metric("Estimated Value", "N/A")
+                
+                    if comps:
+                        st.markdown("#### 🏘️ Comparable Listings")
+                        st.caption(f"Based on recent rentals within a 1.5 mile radius.")
+                
+                        # CSS Style Block
+                        style_block = "<style>.comp-table{width:100%;border-collapse:collapse;font-family:'Inter',sans-serif;font-size:0.9rem;color:#202124;}.comp-table th{text-align:left;text-transform:uppercase;font-size:0.75rem;color:#5F6368;border-bottom:1px solid #E0E0E0;padding:10px 5px;font-weight:600;}.comp-table td{padding:12px 5px;border-bottom:1px solid #F1F3F4;vertical-align:top;}.comp-num{display:inline-block;width:24px;height:24px;background-color:#5F6368;color:white;border-radius:50%;text-align:center;line-height:24px;font-size:0.8rem;font-weight:bold;}.addr-main{font-weight:600;font-size:0.95rem;}.addr-sub{color:#5F6368;font-size:0.85rem;}.price-main{font-weight:700;color:#333;}.price-sub{color:#5F6368;font-size:0.85rem;}.sim-badge{background-color:#E6F4EA;color:#137333;padding:3px 8px;border-radius:12px;font-weight:600;display:inline-block;font-size:0.85rem;}.type-main{color:#3C4043;}.type-sub{color:#5F6368;font-size:0.8rem;}</style>"
+                
+                        rows_html = ""
+                        # LIMIT TO TOP 5
+                        for i, c in enumerate(comps[:5]):
+                            price_fmt = f"${c.get('price', 0):,}"
+                            ppsf_fmt = f"${c.get('ppsf', 0):.2f} /ft²" if c.get('ppsf') else "-"
+                            dist_fmt = f"{c.get('distance', 0):.2f} mi"
+                            beds = c.get('bedrooms', '-')
+                            baths = c.get('bathrooms', '-')
+                            sqft = f"{c.get('squareFootage', 0):,}"
+                            p_type = c.get('propertyType', 'Single Family')
+                            y_built = f"Built {c.get('yearBuilt')}" if c.get('yearBuilt') else ""
+                    
+                            addr1 = c.get('address_line1', 'Unknown')
+                            addr2 = c.get('address_line2', '')
+                    
+                            rows_html += f"""<tr><td><span class="comp-num">{i+1}</span></td><td><div class="addr-main">{addr1}</div><div class="addr-sub">{addr2}</div></td><td><div class="price-main">{price_fmt}</div><div class="price-sub">{ppsf_fmt}</div></td><td style="color:#5F6368;">{dist_fmt}</td><td style="color:#3C4043;">{beds}</td><td style="color:#3C4043;">{baths}</td><td style="color:#3C4043;">{sqft}</td><td><div class="type-main">{p_type}</div><div class="type-sub">{y_built}</div></td></tr>"""
+
+                        full_table = f"""{style_block}<table class="comp-table"><thead><tr><th style="width:5%;"></th><th style="width:30%;">ADDRESS</th><th style="width:20%;">LISTED RENT</th><th style="width:10%;">DISTANCE</th><th style="width:5%;">BEDS</th><th style="width:5%;">BATHS</th><th style="width:10%;">SQ.FT.</th><th style="width:15%;">TYPE</th></tr></thead><tbody>{rows_html}</tbody></table>"""
+                
+                        st.markdown(full_table, unsafe_allow_html=True)
+
                     else:
-                        st.metric("Estimated Value", "N/A")
-                
-                if comps:
-                    st.markdown("#### 🏘️ Comparable Listings")
-                    st.caption(f"Based on recent rentals within a 1.5 mile radius.")
-                
-                    # CSS Style Block
-                    style_block = "<style>.comp-table{width:100%;border-collapse:collapse;font-family:'Inter',sans-serif;font-size:0.9rem;color:#202124;}.comp-table th{text-align:left;text-transform:uppercase;font-size:0.75rem;color:#5F6368;border-bottom:1px solid #E0E0E0;padding:10px 5px;font-weight:600;}.comp-table td{padding:12px 5px;border-bottom:1px solid #F1F3F4;vertical-align:top;}.comp-num{display:inline-block;width:24px;height:24px;background-color:#5F6368;color:white;border-radius:50%;text-align:center;line-height:24px;font-size:0.8rem;font-weight:bold;}.addr-main{font-weight:600;font-size:0.95rem;}.addr-sub{color:#5F6368;font-size:0.85rem;}.price-main{font-weight:700;color:#333;}.price-sub{color:#5F6368;font-size:0.85rem;}.sim-badge{background-color:#E6F4EA;color:#137333;padding:3px 8px;border-radius:12px;font-weight:600;display:inline-block;font-size:0.85rem;}.type-main{color:#3C4043;}.type-sub{color:#5F6368;font-size:0.8rem;}</style>"
-                
-                    rows_html = ""
-                    # LIMIT TO TOP 5
-                    for i, c in enumerate(comps[:5]):
-                        price_fmt = f"${c.get('price', 0):,}"
-                        ppsf_fmt = f"${c.get('ppsf', 0):.2f} /ft²" if c.get('ppsf') else "-"
-                        dist_fmt = f"{c.get('distance', 0):.2f} mi"
-                        beds = c.get('bedrooms', '-')
-                        baths = c.get('bathrooms', '-')
-                        sqft = f"{c.get('squareFootage', 0):,}"
-                        p_type = c.get('propertyType', 'Single Family')
-                        y_built = f"Built {c.get('yearBuilt')}" if c.get('yearBuilt') else ""
-                    
-                        addr1 = c.get('address_line1', 'Unknown')
-                        addr2 = c.get('address_line2', '')
-                    
-                        rows_html += f"""<tr><td><span class="comp-num">{i+1}</span></td><td><div class="addr-main">{addr1}</div><div class="addr-sub">{addr2}</div></td><td><div class="price-main">{price_fmt}</div><div class="price-sub">{ppsf_fmt}</div></td><td style="color:#5F6368;">{dist_fmt}</td><td style="color:#3C4043;">{beds}</td><td style="color:#3C4043;">{baths}</td><td style="color:#3C4043;">{sqft}</td><td><div class="type-main">{p_type}</div><div class="type-sub">{y_built}</div></td></tr>"""
-
-                    full_table = f"""{style_block}<table class="comp-table"><thead><tr><th style="width:5%;"></th><th style="width:30%;">ADDRESS</th><th style="width:20%;">LISTED RENT</th><th style="width:10%;">DISTANCE</th><th style="width:5%;">BEDS</th><th style="width:5%;">BATHS</th><th style="width:10%;">SQ.FT.</th><th style="width:15%;">TYPE</th></tr></thead><tbody>{rows_html}</tbody></table>"""
-                
-                    st.markdown(full_table, unsafe_allow_html=True)
-
+                         st.info("Rental Analysis: No comparable data returned by RentCast.")
                 else:
-                     st.info("Rental Analysis: No comparable data returned by RentCast.")
-            else:
-                 st.info("Rental Analysis: No data available.")
+                     st.info("Rental Analysis: No data available.")
 
         # 2. AI INSIGHT SUMMARY (Moved per user request)
         with st.container(border=True):
-            # Header with Score
-            c_head, c_score = st.columns([3, 1])
-            with c_head:
-                st.subheader("AI Insight Summary")
+                # Header with Score
+                c_head, c_score = st.columns([3, 1])
+                with c_head:
+                    st.subheader("AI Insight Summary")
         
-            llm_res = st.session_state.get("llm_result") or {}
-            score = llm_res.get("score", 0)
-            highlights = llm_res.get("highlights", [])
-            risks = llm_res.get("risks", [])
-            strategy = llm_res.get("investment_strategy", "No analysis available.")
+                llm_res = st.session_state.get("llm_result") or {}
+                score = llm_res.get("score", 0)
+                highlights = llm_res.get("highlights", [])
+                risks = llm_res.get("risks", [])
+                strategy = llm_res.get("investment_strategy", "No analysis available.")
         
-            with c_score:
-                # 75-100: Green "High Opportunity", 60-74 Orng "Good Opportunity", <60 Red "Caution!"
-                delta_color = "normal"
-                if score >= 75:
-                    delta_label = "High Opportunity"
-                    delta_color = "normal" # We really want Green. delta="text" usually colors green for positive
-                    score_icon = "🟢"
-                elif score >= 60:
-                    delta_label = "Good Opportunity"
-                    score_icon = "🟠"
-                    delta_color = "off" # Greyish? Streamlit metrics limited. We can use st.markdown instead.
-                else:
-                    delta_label = "Caution!"
-                    delta_color = "inverse"
-                    score_icon = "🔴"
+                with c_score:
+                    # 75-100: Green "High Opportunity", 60-74 Orng "Good Opportunity", <60 Red "Caution!"
+                    delta_color = "normal"
+                    if score >= 75:
+                        delta_label = "High Opportunity"
+                        delta_color = "normal" # We really want Green. delta="text" usually colors green for positive
+                        score_icon = "🟢"
+                    elif score >= 60:
+                        delta_label = "Good Opportunity"
+                        score_icon = "🟠"
+                        delta_color = "off" # Greyish? Streamlit metrics limited. We can use st.markdown instead.
+                    else:
+                        delta_label = "Caution!"
+                        delta_color = "inverse"
+                        score_icon = "🔴"
             
-                # Using custom HTML/Markdown for better color control
-                color_hex = "#137333" if score >= 75 else ("#E37400" if score >= 60 else "#D93025")
-                st.markdown(f"""
-                <div style="text-align: right;">
-                    <div style="font-size: 1rem; color: #5f6368;">AI Location Score</div>
-                    <div style="font-size: 2rem; font-weight: bold; color: {color_hex};">
-                        {score}/100
+                    # Using custom HTML/Markdown for better color control
+                    color_hex = "#137333" if score >= 75 else ("#E37400" if score >= 60 else "#D93025")
+                    st.markdown(f"""
+                    <div style="text-align: right;">
+                        <div style="font-size: 1rem; color: #5f6368;">AI Location Score</div>
+                        <div style="font-size: 2rem; font-weight: bold; color: {color_hex};">
+                            {score}/100
+                        </div>
+                        <div style="font-size: 0.9rem; color: {color_hex}; font-weight: 600;">
+                            {score_icon} {delta_label}
+                        </div>
                     </div>
-                    <div style="font-size: 0.9rem; color: {color_hex}; font-weight: 600;">
-                        {score_icon} {delta_label}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
         
-            # [NEW] Display Tier and Tenant Profile
-            tier = llm_res.get("location_tier")
-            tenant = llm_res.get("tenant_profile")
+                # [NEW] Display Tier and Tenant Profile
+                tier = llm_res.get("location_tier")
+                tenant = llm_res.get("tenant_profile")
         
-            if tier or tenant:
-                 st.markdown("---") # Divider
-                 t_c1, t_c2 = st.columns(2)
-                 if tier: 
-                     t_c1.markdown(f"🏷️ **Location Tier:** {tier}")
-                 if tenant:
-                     t_c2.markdown(f"👥 **Tenant Profile:** {tenant}")
-                 st.markdown("---")
+                if tier or tenant:
+                     st.markdown("---") # Divider
+                     t_c1, t_c2 = st.columns(2)
+                     if tier: 
+                         t_c1.markdown(f"🏷️ **Location Tier:** {tier}")
+                     if tenant:
+                         t_c2.markdown(f"👥 **Tenant Profile:** {tenant}")
+                     st.markdown("---")
 
-            # Helper to Bold Numbers/Percentages
-            import re
-            def bold_numbers(text):
-                if not text: return ""
-                # Regex to match: $Dollar, 12,345, 99%, 4.5
-                # Must contain at least one digit to avoid matching punctuation like "," or "."
-                return re.sub(r'(\+?-?\$?\d+(?:,\d+)*(?:\.\d+)?%?)', r'**\1**', str(text))
+                # Helper to Bold Numbers/Percentages
+                import re
+                def bold_numbers(text):
+                    if not text: return ""
+                    # Regex to match: $Dollar, 12,345, 99%, 4.5
+                    # Must contain at least one digit to avoid matching punctuation like "," or "."
+                    return re.sub(r'(\+?-?\$?\d+(?:,\d+)*(?:\.\d+)?%?)', r'**\1**', str(text))
 
-            st.info(f"**Investment Strategy:**\n{bold_numbers(strategy)}", icon="🤖")
+                st.info(f"**Investment Strategy:**\n{bold_numbers(strategy)}", icon="🤖")
         
-            ai_c1, ai_c2 = st.columns(2)
-            with ai_c1:
-                st.markdown("**Key Advantages**")
-                # Filter empty strings and strip accidental quotes
-                valid_highlights = [h.strip().strip('"').strip("'") for h in highlights if h and str(h).strip()]
-                for h in valid_highlights:
-                    # Remove bold_numbers to prevent formatting issues
-                    st.success(f"✅ {h}")
+                ai_c1, ai_c2 = st.columns(2)
+                with ai_c1:
+                    st.markdown("**Key Advantages**")
+                    # Filter empty strings and strip accidental quotes
+                    valid_highlights = [h.strip().strip('"').strip("'") for h in highlights if h and str(h).strip()]
+                    for h in valid_highlights:
+                        # Remove bold_numbers to prevent formatting issues
+                        st.success(f"✅ {h}")
 
-            with ai_c2:
-                st.markdown("**Potential Risks**")
-                valid_risks = [r.strip().strip('"').strip("'") for r in risks if r and str(r).strip()]
-                for r in valid_risks:
-                    st.warning(f"⚠️ {r}")
+                with ai_c2:
+                    st.markdown("**Potential Risks**")
+                    valid_risks = [r.strip().strip('"').strip("'") for r in risks if r and str(r).strip()]
+                    for r in valid_risks:
+                        st.warning(f"⚠️ {r}")
 
 
     # --- COLUMN 3: MAP (40%) ---
