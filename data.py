@@ -518,11 +518,13 @@ def get_cached_rentcast(key_data):
         
         if os.path.exists(filename):
             # Check modification time (TTL: 240 hours / 10 days)
+            # Check modification time
             mtime = os.path.getmtime(filename)
             file_time = datetime.datetime.fromtimestamp(mtime)
             age = datetime.datetime.now() - file_time
             
-            if age.total_seconds() < 240 * 3600:
+            ttl_hours = config_manager.get_config().get("cache_ttl_hours", 240)
+            if age.total_seconds() < ttl_hours * 3600:
                 with open(filename, 'rb') as f:
                     return pickle.load(f)
     except Exception as e:

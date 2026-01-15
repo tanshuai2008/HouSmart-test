@@ -154,7 +154,7 @@ with st.form("settings_form"):
     st.subheader("💾 Cache Settings")
     
     cache_ttl = st.number_input(
-        "Cache TTL (Hours)",
+        "RentCast Cache TTL (Hours)",
         min_value=1,
         max_value=1000,
         value=int(config.get("cache_ttl_hours", 240)),
