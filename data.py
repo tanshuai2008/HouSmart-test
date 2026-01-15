@@ -110,7 +110,6 @@ class CensusDataService:
             "B15003_023E": "Edu_Master",
             "B15003_024E": "Edu_Prof",
             "B15003_025E": "Edu_Doctorate",
-            "B15003_025E": "Edu_Doctorate",
             # Age
             "B01002_001E": "Median Age",
             "B01001_001E": "Total Population",
@@ -125,8 +124,7 @@ class CensusDataService:
             "B19001_008E": "Inc_8", "B19001_009E": "Inc_9", "B19001_010E": "Inc_10", # <50k end
             "B19001_011E": "Inc_11", "B19001_012E": "Inc_12", "B19001_013E": "Inc_13",
             "B19001_014E": "Inc_14", "B19001_015E": "Inc_15", # <125k
-            "B19001_016E": "Inc_16", "B19001_017E": "Inc_17", # 125-150, 150-200, 200+ is 018? Assume 17 is max here or add 18
-            "B19001_018E": "Inc_17plus", # Just in case
+            "B19001_016E": "Inc_16", "B19001_017E": "Inc_17", # 125-150, 150-200, >200 is 17?
             # Age Buckets (B01001) - Simplified to key ranges if possible, else fetch many
             # Fetching Male (003-025) and Female (027-049) is too many.
             # Use total population to approximate? No. 
@@ -235,50 +233,55 @@ class CensusDataService:
         tract = geoid_data['tract']
         bg = geoid_data['block_group']
         
-        # Construct variable list
-        vars_str = ",".join(self.variables.keys())
+        all_vars = list(self.variables.keys())
+        # ACS API limit is usually 50 variables. We have ~80.
+        chunk_size = 20
         
-        # https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E...&for=block group:X&in=state:xx county:xxx tract:xxxxxx
-        params = {
-            "get": f"NAME,{vars_str}",
-            "for": f"block group:{bg}",
-            "in": f"state:{state} county:{county} tract:{tract}"
-        }
+        combined_result = {}
         
-        try:
-            print(f"DEBUG: Fetching ACS Data for State:{state} County:{county} Tract:{tract} BG:{bg}")
-            r = requests.get(self.acs_base_url, params=params)
-            print(f"DEBUG: ACS Response Code: {r.status_code}")
-            if r.status_code == 200:
-                # Response is list of lists. Row 0 = Headers, Row 1 = Data
-                rows = r.json()
-                if len(rows) > 1:
-                    headers = rows[0]
-                    data_row = rows[1]
-                    
-                    result = {}
-                    # Map back to readable keys
-                    for code, label in self.variables.items():
-                        if code in headers:
-                            idx = headers.index(code)
-                            val = data_row[idx]
-                            # Clean up values (negative numbers often mean missing data in Census)
-                            if val:
-                                try:
-                                    num_val = float(val)
-                                    if num_val > 0:
-                                        # Store as int if integer, else float
-                                        if num_val.is_integer():
-                                            result[code] = int(num_val)
-                                        else:
-                                            result[code] = num_val
-                                except ValueError:
-                                    pass
-                    return result
-        except Exception as e:
-            print(f"ACS API Error: {e}")
+        for i in range(0, len(all_vars), chunk_size):
+            chunk = all_vars[i:i+chunk_size]
+            vars_str = ",".join(chunk)
             
-        return None
+            # https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E...&for=block group:X&in=state:xx county:xxx tract:xxxxxx
+            params = {
+                "get": f"NAME,{vars_str}",
+                "for": f"block group:{bg}",
+                "in": f"state:{state} county:{county} tract:{tract}"
+            }
+            
+            try:
+                print(f"DEBUG: Fetching ACS Data Batch {i//chunk_size + 1}...")
+
+                r = requests.get(self.acs_base_url, params=params)
+                
+                if r.status_code == 200:
+                    rows = r.json()
+                    if len(rows) > 1:
+                        headers = rows[0]
+                        data_row = rows[1]
+                        
+                        # Map back to readable keys
+                        for code, label in self.variables.items():
+                            if code in headers:
+                                idx = headers.index(code)
+                                val = data_row[idx]
+                                if val:
+                                    try:
+                                        num_val = float(val)
+                                        if num_val >= 0: # -666666666 means missing
+                                            if num_val.is_integer():
+                                                combined_result[code] = int(num_val)
+                                            else:
+                                                combined_result[code] = num_val
+                                    except ValueError:
+                                        pass
+                else:
+                    print(f"DEBUG: ACS Batch {i//chunk_size + 1} Failed: {r.status_code}")
+            except Exception as e:
+                print(f"ACS API Error: {e}")
+                
+        return combined_result if combined_result else None
 
     def compare_with_benchmarks(self, local_data, geoid_data):
         """
@@ -308,6 +311,18 @@ class CensusDataService:
         
         benchmarks = state_data.get_state_benchmarks(state_name)
         
+        # Remap Keys for Viz Utils
+        benchmarks["state_edu_dist"] = benchmarks.get("state_edu", [0,0,0])
+        benchmarks["state_age_dist"] = benchmarks.get("state_age", [0,0,0,0,0])
+        benchmarks["state_race_dist"] = benchmarks.get("state_race", [0,0,0,0,0])
+        
+        benchmarks["us_edu_dist"] = benchmarks.get("us_edu", [0,0,0])
+        benchmarks["us_age_dist"] = benchmarks.get("us_age", [0,0,0,0,0])
+        benchmarks["us_race_dist"] = benchmarks.get("us_race", [0,0,0,0,0])
+        
+        benchmarks["state_income_dist"] = [0, 0, 0] 
+        benchmarks["us_income_dist"] = [0, 0, 0]
+
         # Build final object
         output = {
             "location_identifiers": geoid_data,
@@ -326,6 +341,7 @@ class CensusDataService:
         # 1. Household Income
         med_income = local_data.get("B19013_001E")
         output["metrics"]["median_income"] = {"local": med_income if med_income else 0}
+        output["metrics"]["median_income_str"] = f"{med_income:,}" if med_income else "N/A"
         
         # 2. Home Value
         med_value = local_data.get("B25077_001E")
@@ -383,7 +399,7 @@ class CensusDataService:
         # Income 50-150k (011E .. 016E? 016 is 125-150. 017 is 150-200. So 11-16 is <150k)
         inc_mid = sum(local_data.get(f"B19001_{i:03d}E", 0) or 0 for i in range(11, 17))
         # Income >150k (017E .. ?)
-        inc_high = (local_data.get("B19001_017E", 0) or 0) + (local_data.get("B19001_018E", 0) or 0) # Adjust if 18 doesn't exist
+        inc_high = (local_data.get("B19001_017E", 0) or 0) # Adjust if 18 doesn't exist
         
         # Normalize to Percentages? Viz utils expects raw or pct?
         # Viz utils seems to render as is. If passing counts, the bars will be huge counts.
