@@ -10,6 +10,7 @@ import os
 import hashlib
 import pickle
 import json
+from functools import lru_cache
 
 CACHE_DIR = "analysis_cache"
 
@@ -92,6 +93,70 @@ def get_poi(address, api_key=None, lat=None, lon=None):
             
     return pois, lat, lon
 
+@lru_cache(maxsize=100)
+def fetch_acs_benchmark_income(region_type, region_code):
+    """
+    Fetches B19001 income variables for a specific region (state check or US).
+    Returns [pct_low, pct_mid, pct_high].
+    Cached to avoid repeated API calls.
+    """
+    url = "https://api.census.gov/data/2022/acs/acs5"
+    
+    # Variables: Total, <50k (2-10), 50-150k (11-15), 150k+ (16-17)
+    # We need to fetch range 001E to 017E
+    vars_list = [f"B19001_{i:03d}E" for i in range(1, 18)]
+    vars_str = ",".join(vars_list)
+    
+    params = {
+        "get": f"NAME,{vars_str}"
+    }
+    
+    if region_type == "us":
+        params["for"] = "us:1"
+    else:
+        params["for"] = f"state:{region_code}"
+        
+    try:
+        r = requests.get(url, params=params, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            if len(data) > 1:
+                # data[0] is headers, data[1] is values
+                # headers: NAME, B19001_001E, ...
+                headers = data[0]
+                values = data[1]
+                
+                # Map codes to values
+                val_map = {}
+                for idx, h in enumerate(headers):
+                    try:
+                         val_map[h] = float(values[idx]) if values[idx] else 0
+                    except:
+                        val_map[h] = 0
+                        
+                total_hh = val_map.get("B19001_001E", 0)
+                if total_hh == 0:
+                    return [0, 0, 0]
+                    
+                # <50k: 002E to 010E
+                inc_low = sum(val_map.get(f"B19001_{i:03d}E", 0) for i in range(2, 11))
+                
+                # 50k-150k: 011E to 015E
+                inc_mid = sum(val_map.get(f"B19001_{i:03d}E", 0) for i in range(11, 16))
+                
+                # >150k: 016E to 017E
+                inc_high = sum(val_map.get(f"B19001_{i:03d}E", 0) for i in range(16, 18))
+                
+                return [
+                    round(inc_low / total_hh * 100, 1),
+                    round(inc_mid / total_hh * 100, 1),
+                    round(inc_high / total_hh * 100, 1)
+                ]
+    except Exception as e:
+        print(f"Benchmark Fetch Error ({region_type}): {e}")
+        
+    return [0, 0, 0]
+
 class CensusDataService:
     def __init__(self, geo_key=None):
         self.geo_key = geo_key
@@ -119,6 +184,7 @@ class CensusDataService:
             "B02001_005E": "Race_Asian",
             "B03003_003E": "Origin_Hispanic",
             # Income Buckets (B19001)
+            "B19001_001E": "Income_Total_Households",
             "B19001_002E": "Inc_2", "B19001_003E": "Inc_3", "B19001_004E": "Inc_4",
             "B19001_005E": "Inc_5", "B19001_006E": "Inc_6", "B19001_007E": "Inc_7",
             "B19001_008E": "Inc_8", "B19001_009E": "Inc_9", "B19001_010E": "Inc_10", # <50k end
@@ -315,13 +381,14 @@ class CensusDataService:
         benchmarks["state_edu_dist"] = benchmarks.get("state_edu", [0,0,0])
         benchmarks["state_age_dist"] = benchmarks.get("state_age", [0,0,0,0,0])
         benchmarks["state_race_dist"] = benchmarks.get("state_race", [0,0,0,0,0])
-        
+
         benchmarks["us_edu_dist"] = benchmarks.get("us_edu", [0,0,0])
         benchmarks["us_age_dist"] = benchmarks.get("us_age", [0,0,0,0,0])
         benchmarks["us_race_dist"] = benchmarks.get("us_race", [0,0,0,0,0])
-        
-        benchmarks["state_income_dist"] = [0, 0, 0] 
-        benchmarks["us_income_dist"] = [0, 0, 0]
+
+        # NEW: Fetch dynamic income benchmarks
+        benchmarks["state_income_dist"] = fetch_acs_benchmark_income("state", state_fips)
+        benchmarks["us_income_dist"] = fetch_acs_benchmark_income("us", "1")
 
         # Build final object
         output = {
@@ -329,7 +396,7 @@ class CensusDataService:
             "metrics": {},
             "benchmarks": benchmarks
         }
-        
+
         # Helper to structure metric
         def make_metric(local_val, key_bench=None):
             return {
@@ -337,29 +404,29 @@ class CensusDataService:
                 "state": benchmarks.get(key_bench, {} if key_bench else 0), # Simplified
                 "national": 0 # Placeholder
             }
-        
+
         # 1. Household Income
         med_income = local_data.get("B19013_001E")
         output["metrics"]["median_income"] = {"local": med_income if med_income else 0}
         output["metrics"]["median_income_str"] = f"{med_income:,}" if med_income else "N/A"
-        
+
         # 2. Home Value
         med_value = local_data.get("B25077_001E")
         output["metrics"]["median_home_value"] = {"local": med_value if med_value else 0}
-        
+
         # 3. Rent
         med_rent = local_data.get("B25064_001E")
         output["metrics"]["median_gross_rent"] = {"local": med_rent if med_rent else 0}
-        
+
         # 4. Education (Bachelors+)
         total_25_plus = local_data.get("B15003_001E", 0) or 0
-        
+
         e_hs = 0
         e_bach = 0
         e_mast = 0
         e_prof = 0
         e_doc = 0
-        
+
         if total_25_plus > 0:
             e_hs = local_data.get("B15003_017E", 0) or 0
             e_bach = local_data.get("B15003_022E", 0) or 0
@@ -381,26 +448,26 @@ class CensusDataService:
         r_black = local_data.get("B02001_003E", 0) or 0
         r_asian = local_data.get("B02001_005E", 0) or 0
         r_hisp = local_data.get("B03003_003E", 0) or 0
-        
+
         # Pass raw counts
         output["metrics"]["Race_White"] = {"local": r_white}
         output["metrics"]["Race_Black"] = {"local": r_black}
         output["metrics"]["Race_Asian"] = {"local": r_asian}
         output["metrics"]["Origin_Hispanic"] = {"local": r_hisp}
         output["metrics"]["Race_Total"] = {"local": r_tot}
-    
+
         # 6. Age
         med_age = local_data.get("B01002_001E")
         output["metrics"]["median_age"] = {"local": med_age if med_age else 0}
-        
+
         # 7. Aggregates for Buckets (Viz Utils Support)
         # Income <50k (B19001_002E .. 010E)
         inc_low = sum(local_data.get(f"B19001_{i:03d}E", 0) or 0 for i in range(2, 11))
-        # Income 50-150k (011E .. 016E? 016 is 125-150. 017 is 150-200. So 11-16 is <150k)
-        inc_mid = sum(local_data.get(f"B19001_{i:03d}E", 0) or 0 for i in range(11, 17))
-        # Income >150k (017E .. ?)
-        inc_high = (local_data.get("B19001_017E", 0) or 0) # Adjust if 18 doesn't exist
-        
+        # Income 50-150k (B19001_011E .. 015E)
+        inc_mid = sum(local_data.get(f"B19001_{i:03d}E", 0) or 0 for i in range(11, 16))
+        # Income >150k (B19001_016E .. 017E)
+        inc_high = sum(local_data.get(f"B19001_{i:03d}E", 0) or 0 for i in range(16, 18))
+
         # Normalize to Percentages? Viz utils expects raw or pct?
         # Viz utils seems to render as is. If passing counts, the bars will be huge counts.
         # But Benchmarks are percentages (e.g. 20.5).
