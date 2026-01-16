@@ -1,106 +1,94 @@
-# HouSmart 🏠
+# HouSmart 🏠 | AI-Native Real Estate Intelligence
 
-**AI-Driven Real Estate Location Intelligence MVP**
+**HouSmart** is a vertical AI platform designed to automate real estate due diligence. Unlike generic LLM wrappers, HouSmart combines deterministic scoring models with generative reasoning to provide actionable, data-backed investment insights.
 
-HouSmart is a Python-based location analysis tool built with Streamlit. It leverages Generative AI (Google Gemini) and real-time data APIs (e.g., Geoapify, US Census Bureau, Rentcast, etc.) to provide comprehensive investment insights for any US address. 
-
-Just enter an address, and HouSmart evaluates the neighborhood's potential, risks, and demographic suitability in seconds.
+它不仅是“聊天”，而是**计算**。它将来自 US Census、FCC 和 Geoapify 的硬数据与用户的投资偏好（长期记忆）相结合，生成具有可解释性的投资备忘录。
 
 ---
 
-## 🌟 Features
+## 🚀 Core Philosophy: Why HouSmart?
 
-*   **📍 Smart Geocoding & POI Analysis**:
-    *   Integrates **Geoapify Places API** to identify key amenities (commercial, education, leisure) within a 1 km radius.
-    *   Interactive map visualization using **PyDeck** (MapBox compatible).
-*   **📊 Real Demographic Data**:
-    *   Automatic **FIPS Code Lookup** via FCC API.
-    *   Fetches real-time population and business statistics from the **US Census Bureau API** (2024 Demographics & Business Patterns).
-*   **🤖 Generative AI Insights**:
-    *   Powered by **Google Gemini 2.5 Flash**.
-    *   Synthesizes raw data into actionable reports:
-        *   **Highlights**: Key selling points of the location.
-        *   **Risks**: Potential downsides (e.g., low business density, high vacancy).
-        *   **Investment Strategy**: Tailored advice for investors.
-        *   **Location Score**: Quantified 0-100 rating.
-        *   **Memorize User's preference**: LLM will integrate your earlier input preference for the analysis. For example, it will remind you if a house is close to highway, but you told LLM that you dont want noise.
-*   **🛡️ Robust Fallbacks**:
-    *   Smartly falls back to AI-estimated demographics if official Census data is unavailable for a specific block.
-
+Generic models (like ChatGPT) are prone to hallucinations when dealing with specific real estate metrics. HouSmart solves this by implementing a **"System of Record + System of Intelligence"** architecture:
+1.  **Deterministic Data Layer**: We use verified data sources (Census Bureau, Geoapify) for objective metrics (Crime, Schools, ROI).
+2.  **Hard Logic Scoring**: A Python-based normalization engine calculates stability scores *before* the AI sees the data.
+3.  **Contextual Reasoning**: The LLM (Gemini) acts as an analyst, interpreting the pre-calculated scores rather than inventing them.
 ---
 
-## 🛠️ Technology Stack
-
-*   **Frontend**: [Streamlit](https://streamlit.io/)
-*   **AI Engine**: [Google Gemini API](https://ai.google.dev/)
-*   **Mapping**: [PyDeck](https://pydeck.gl/)
-*   **Data Sources**:
-    *   [Geoapify](https://www.geoapify.com/) (Geocoding & Places)
-    *   [US Census Bureau](https://www.census.gov/data/developers/data-sets.html) (Demographics & Economics)
-    *   [FCC](https://geo.fcc.gov/) (Block & FIPS Conversion)
-
+## 🌟 Key Features
+### 1. Multi-Source Data Fusion (The "Truth" Layer)
+Aggregates fragmented data into a unified property profile:
+* **Demographics**: Real-time population, income, and housing vacancy data via **US Census Bureau API**.
+* **Hyper-Local Amenities**: 1km-radius POI analysis (Schools, Transit, Leisure) using **Geoapify**.
+* **FIPS Precision**: Automatic block-level geolocation conversion via **FCC API**.
+### 2. Context-Aware Memory (The "Moat")
+* **Stateful User Profiles**: Powered by **Supabase (PostgreSQL)**, HouSmart remembers user preferences (e.g., "I avoid high-traffic areas" or "I need cash-flow focus").
+* **Adaptive Analysis**: The system automatically adjusts its recommendations based on historical user interactions stored in the `logs/` and database.
+### 3. Investment Logic Engine
+* **Visualization**: Interactive hex-layer maps using **PyDeck** for intuitive location understanding.
+* **Risk Assessment**: Automated "Red Flag" detection for vacancy rates and economic downturn trends.
+* **Smart Fallbacks**: Robust error handling that estimates demographics when official block-level data is missing.
 ---
 
-## 🚀 Getting Started
+## 🛠️ Technical Architecture
+```mermaid
+graph TD
+    User[User Input] --> App[Streamlit Frontend]
+    App --> DataLayer[Data Aggregation Layer]
+    
+    subgraph "Data Fusion"
+        DataLayer --> Geo[Geoapify API]
+        DataLayer --> Census[US Census API]
+        DataLayer --> DB[(Supabase Memory)]
+    end
+    
+    DataLayer --> Logic[Normalization Engine]
+    Logic --> LLM[Google Gemini 2.0]
+    
+    LLM --> Report[Investment Memo]
+    Report --> UI[Interactive Dashboard]
 
-### Prerequisites
+Directory Structure
+Home.py: Application entry point and UI orchestration.
+llm.py: The Generative AI logic, handling prompt engineering and reasoning.
+data.py: Core data fetchers for Census and third-party APIs.
+map.py: Geospatial visualization logic (PyDeck).
+supabase_utils.py: Database connection for state management and user memory.
+components.py: Reusable UI widgets.
 
-*   Python 3.9+
-*   API Keys:
-    *   **Google Gemini API Key** (Required for analysis)
-    *   **Geoapify API Key** (Recommended for accurate POI data)
+⚡ Getting Started
+Prerequisites
+Python 3.9+
 
-### Installation
+API Keys for Google Gemini, Geoapify, and Supabase.
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/tanshuai2008/HouSmart-OPC.git
-    cd HouSmart-OPC/HouSmart
-    ```
+Installation
+1. Clone the repository
+git clone [https://github.com/tanshuai2008/HouSmart-test.git](https://github.com/tanshuai2008/HouSmart-test.git)
+cd HouSmart-test
+2. Install Dependencies
+pip install -r requirements.txt
+3. Configuration Create a .streamlit/secrets.toml file with your credentials:
+# AI & Maps
+GEMINI_API_KEY = "your_google_ai_key"
+GEOAPIFY_API_KEY = "your_geoapify_key"
 
-2.  **Install dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
+# Database (Supabase)
+SUPABASE_URL = "your_supabase_url"
+SUPABASE_KEY = "your_supabase_anon_key"
 
-3.  **Google Sheets Setup (Optional for Persistence)**:
-    *   Create a Google Cloud Project and enable **Google Sheets API**.
-    *   Create a **Service Account** and download the JSON key.
-    *   Create a Google Sheet named `HouSmart_Logs` and share it with the Service Account email.
-    *   Add the JSON content to your `secrets.toml` (or Streamlit Cloud Secrets) under a `[gcp_service_account]` section.
+# Optional: Google Sheets for legacy logging
+[gcp_service_account]
+# ... your GCP credentials
+4.Run the Application
+streamlit run Home.py
 
-4.  **Configure Environment**:
-    Create a `.streamlit/secrets.toml` file in the `HouSmart` directory for local development, or add these to your [Streamlit Cloud Secrets](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management):
-    ```toml
-    # .streamlit/secrets.toml
-    GEMINI_API_KEY = "your_primary_key"
-    GEMINI_API_KEY_2 = "your_backup_key_1" # Optional: Auto-rotation
-    GEMINI_API_KEY_3 = "your_backup_key_2"
-    GEOAPIFY_API_KEY = "your_geoapify_key_here"
-    ```
-    *Note: The application calls these keys directly from `st.secrets`.*
+Roadmap
+Phase 1 (MVP): Streamlit prototype with basic data fetching and AI summary. ✅
+Phase 2 (Hard Logic): Implement the custom StabilityScoringModel (Python-based weighted scoring) to reduce AI dependence. 🚧
+Phase 3 (Platform): Migrate frontend to React/Next.js for consumer-grade experience.
+Phase 4 (RAG): Ingest historical transaction data into Supabase Vector Store for comparable market analysis (Comps).
 
-### Running the App
+📄 License
+Distributed under the MIT License. See LICENSE for more information.
 
-```bash
-streamlit run app.py
-```
-
-Open your browser to `http://localhost:8501`.
-
----
-
-## 📖 Usage Guide
-
-1.  **Enter Credentials**: If not set in `.env`, paste your Gemini and Geoapify keys in the sidebar.
-2.  **Select Model**: Choose your preferred Gemini model (e.g., `gemini-1.5-flash`) from the dropdown.
-3.  **Analyze**: Type a US address (e.g., "123 Main St, Springfield, IL") and click **Analyze Location**.
-4.  **Review Report**:
-    *   **Left Panel**: Interactive map showing the location and nearby amenities.
-    *   **Right Panel**: AI-generated investment report, risk assessment, and raw census data card.
-
----
-
-## 📄 License
-
-This project is open-source and available under the [MIT License](LICENSE).
+Built with ❤️ by tanshuai2008 - Transforming Real Estate with Contextual AI.
