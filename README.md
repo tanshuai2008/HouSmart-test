@@ -2,7 +2,7 @@
 
 **AI-Driven Real Estate Location Intelligence MVP**
 
-HouSmart is a Python-based location analysis tool built with Streamlit. It leverages Generative AI (Google Gemini) and real-time data APIs (Geoapify, US Census Bureau) to provide comprehensive investment insights for any US address. 
+HouSmart is a Python-based location analysis tool built with Streamlit. It leverages Generative AI (Google Gemini) and real-time data APIs (e.g., Geoapify, US Census Bureau, Rentcast, etc.) to provide comprehensive investment insights for any US address. 
 
 Just enter an address, and HouSmart evaluates the neighborhood's potential, risks, and demographic suitability in seconds.
 
@@ -11,18 +11,19 @@ Just enter an address, and HouSmart evaluates the neighborhood's potential, risk
 ## 🌟 Features
 
 *   **📍 Smart Geocoding & POI Analysis**:
-    *   Integrates **Geoapify Places API** to identify key amenities (commercial, education, leisure) within a 1km radius.
+    *   Integrates **Geoapify Places API** to identify key amenities (commercial, education, leisure) within a 1 km radius.
     *   Interactive map visualization using **PyDeck** (MapBox compatible).
 *   **📊 Real Demographic Data**:
     *   Automatic **FIPS Code Lookup** via FCC API.
-    *   Fetches real-time population and business statistics from the **US Census Bureau API** (2023 Demographics & Business Patterns).
+    *   Fetches real-time population and business statistics from the **US Census Bureau API** (2024 Demographics & Business Patterns).
 *   **🤖 Generative AI Insights**:
-    *   Powered by **Google Gemini 1.5 Flash**.
+    *   Powered by **Google Gemini 2.5 Flash**.
     *   Synthesizes raw data into actionable reports:
         *   **Highlights**: Key selling points of the location.
         *   **Risks**: Potential downsides (e.g., low business density, high vacancy).
         *   **Investment Strategy**: Tailored advice for investors.
         *   **Location Score**: Quantified 0-100 rating.
+        *   **Memorize User's preference**: LLM will integrate your earlier input preference for the analysis. For example, it will remind you if a house is close to highway, but you told LLM that you dont want noise.
 *   **🛡️ Robust Fallbacks**:
     *   Smartly falls back to AI-estimated demographics if official Census data is unavailable for a specific block.
 

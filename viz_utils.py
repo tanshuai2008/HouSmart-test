@@ -101,26 +101,28 @@ def generate_census_charts(census_data, address_input=""):
             except: return 0.0
         return 0.0
 
-    # INCOME
+    # INCOME - Median Comparison
     # Local
-    vp_inc_low = safe_parse(c_data.get("income_below_50k", 0))
-    vp_inc_mid = safe_parse(c_data.get("income_50k_150k", 0)) 
-    vp_inc_high = safe_parse(c_data.get("income_above_150k", 0))
-    
-    # Benchmarks
-    s_inc = bench.get("state_income_dist", [0,0,0])
-    u_inc = bench.get("us_income_dist", [0,0,0])
+    med_inc_local = safe_parse(c_data.get("median_income", 0))
+    # Benchmarks (State/National Median)
+    med_inc_state = float(bench.get("state_income", 0) or 0)
+    med_inc_national = float(bench.get("us_income", 0) or 0)
 
-    inc_title = f"Household Income (Median: ${c_data.get('median_income_str', 'N/A')})"
+    inc_title = "Household Income"
+    
+    # State Label Logic
+    state_label = "State"
+    if bench and "state_name" in bench:
+         state_label = bench["state_name"]
+    else:
+        import re
+        match = re.search(r'\b([A-Z]{2})\b\s+\d{5}', address_input)
+        if match:
+             state_label = f"{match.group(1)} State"
 
     df_income = pd.DataFrame({
-        "Range": ["<50k", "<50k", "<50k", "50k-150k", "50k-150k", "50k-150k", ">150k", ">150k", ">150k"],
-        "Scope": ["Local", "State", "National"] * 3,
-        "Value": [
-            vp_inc_low, s_inc[0], u_inc[0],
-            vp_inc_mid, s_inc[1], u_inc[1],
-            vp_inc_high, s_inc[2], u_inc[2]
-        ]
+        "Scope": ["Local", state_label, "National"],
+        "Value": [med_inc_local, med_inc_state, med_inc_national]
     })
 
     # AGE
@@ -134,12 +136,14 @@ def generate_census_charts(census_data, address_input=""):
     s_age = bench.get("state_age_dist", [0,0,0,0,0])
     u_age = bench.get("us_age_dist", [0,0,0,0,0])
 
-    age_title = f"Age Distribution (Median: {c_data.get('median_age', 'N/A')})"
+    # Fix: Extract value from dict for title using safe_parse
+    med_age_val = safe_parse(c_data.get('median_age', 0))
+    age_title = f"Age (Median: {med_age_val})"
 
     df_age = pd.DataFrame({
         "Range": ["<18", "<18", "<18", "18-24", "18-24", "18-24", "25-44", "25-44", "25-44", 
                   "45-64", "45-64", "45-64", "65+", "65+", "65+"],
-        "Scope": ["Local", "State", "National"] * 5,
+        "Scope": ["Local", state_label, "National"] * 5,
         "Value": [
             vp_u18, s_age[0], u_age[0],
             vp_18_24, s_age[1], u_age[1],
@@ -162,7 +166,7 @@ def generate_census_charts(census_data, address_input=""):
 
     df_race = pd.DataFrame({
         "Group": ["White", "White", "White", "Hispanic", "Hispanic", "Hispanic", "Black", "Black", "Black", "Asian", "Asian", "Asian", "Other", "Other", "Other"],
-        "Scope": ["Local", "State", "National"] * 5,
+        "Scope": ["Local", state_label, "National"] * 5,
         "Value": [
             vp_white, s_race[0], u_race[0],
             vp_hisp, s_race[1], u_race[1],
@@ -191,27 +195,13 @@ def generate_census_charts(census_data, address_input=""):
 
     df_edu = pd.DataFrame({
         "Level": ["HighSchool", "HighSchool", "HighSchool", "Bachelor", "Bachelor", "Bachelor", "Adv-Degree", "Adv-Degree", "Adv-Degree"],
-        "Scope": ["Local", "State", "National"] * 3,
+        "Scope": ["Local", state_label, "National"] * 3,
         "Value": [
             vp_hs, s_hs, u_hs, 
             vp_bach, s_bach, u_bach, 
             vp_grad, s_adv, u_adv
         ]
     })
-
-    # State Label Logic
-    state_label = "State"
-    if bench and "state_name" in bench:
-         state_label = bench["state_name"]
-    else:
-        import re
-        match = re.search(r'\b([A-Z]{2})\b\s+\d{5}', address_input)
-        if match:
-             state_label = f"{match.group(1)} State"
-
-    # Update Dataframes
-    for df in [df_income, df_age, df_race, df_edu]:
-        df["Scope"] = df["Scope"].replace("State", state_label)
 
     # Layout Helper
     def update_chart_layout(fig):
@@ -232,17 +222,18 @@ def generate_census_charts(census_data, address_input=""):
 
     # Generate Figures
     # Explicit Category Orders to prevent alphabetical sorting
-    order_inc = ["<50k", "50k-150k", ">150k"]
+    # order_inc not needed for plain bar
     order_age = ["<18", "18-24", "25-44", "45-64", "65+"]
     order_race = ["White", "Hispanic", "Black", "Asian", "Other"]
     order_edu = ["HighSchool", "Bachelor", "Adv-Degree"]
 
     fig_inc = px.bar(
-        df_income, x="Range", y="Value", color="Scope", barmode="group", 
-        title=inc_title, height=250, text_auto='.1f',
-        color_discrete_map=color_map, labels={"Value": "%"},
-        category_orders={"Range": order_inc}
+        df_income, x="Scope", y="Value", color="Scope", 
+        title=inc_title, height=250, text_auto=',.0f', # Full number format
+        color_discrete_map=color_map, labels={"Value": "USD ($)"}
     )
+    # Hide legend for simple bar if redundancy
+    fig_inc.update_layout(showlegend=False)
     update_chart_layout(fig_inc)
 
     fig_age = px.bar(
