@@ -299,6 +299,7 @@ with col1:
         with c_b3:
             st.number_input("Sqft", value=1200, step=50, max_value=99999, key="input_sqft") # Increased max value and column width
             
+        st.number_input("Purchase Price ($)", value=350000, step=10000, key="input_home_price", help="Used for Rent-to-Price Ratio calculation")
         st.selectbox("Property Type", ["Single Family", "Townhouse", "Condo", "Apartment"], key="input_property_type")
         # Limit Check Logic
         # Limit Check Logic
@@ -316,7 +317,36 @@ with col1:
         # Logic: 
         # 1. If global limit is DISABLED -> Limit NOT reached
         # 2. If user is in whitelist -> Limit NOT reached
-        # 3. Otherwise -> Check usage >= 3
+        if usage < 3 or limit_reached == False:
+             # Allowed
+             pass
+        else:
+             limit_reached = True
+             st.error(f"Daily limit reached ({usage}/3). Please wait 24h.")
+             
+        # [NEW] Advanced Scoring Options
+        with st.expander("⚙️ Advanced Scoring", expanded=False):
+            # Disabled per user request (Faded out)
+            enable_custom_score = st.checkbox("Enable Customized Scoring Method", key="enable_custom_score", disabled=True, help="Feature currently unavailable")
+            
+            if enable_custom_score:
+                st.caption("Adjust Weights (Must sum to 100)")
+                w_school = st.slider("Schools %", 0, 100, 50)
+                w_crime = st.slider("Crime %", 0, 100, 20)
+                w_amenity = st.slider("Amenities %", 0, 100, 20)
+                w_income = st.slider("Income %", 0, 100, 10)
+                w_transit = st.slider("Transit %", 0, 100, 0)
+                
+                total_w = w_school + w_crime + w_amenity + w_income + w_transit
+                if total_w != 100:
+                    st.warning(f"Total Weight: {total_w}%. Scores will be normalized.")
+                else:
+                    st.success("Total Weight: 100%")
+                    
+                st.session_state.custom_weights = {
+                    "school": w_school, "crime": w_crime, 
+                    "amenity": w_amenity, "income": w_income, "transit": w_transit
+                }
         
         if not enable_limit:
             limit_reached = False
@@ -447,8 +477,56 @@ if st.session_state.processing:
         schools_data = []
         if sp_url and sp_key:
              schools_data = data.get_nearby_schools_data(lat, lon, sp_url, sp_key, miles=3.0)
+        if sp_url and sp_key:
+             schools_data = data.get_nearby_schools_data(lat, lon, sp_url, sp_key, miles=3.0)
         st.session_state.schools = schools_data
         
+        # 4c. Home Price Trend (RentCast/Redfin Proxy)
+        # Using geocoding result zip if possible but RentCast market uses zip code.
+        # We need zip code from the address or from Geocode result.
+        # Our Geocoder `get_census_geoid` returns FIPS but not ZIP.
+        # Let's extract Zip from `addr_to_geocode` using basic regex.
+        import re
+        zip_match = re.search(r'\b\d{5}\b', addr_to_geocode)
+        zip_code = zip_match.group(0) if zip_match else None
+        
+        # Helper to extract components
+        city_in, state_in = None, None
+        if census_data and "location_identifiers" in census_data:
+             # FIPS State code is there, but standard ABBR is better.
+             # Geoapify returns details in `poi_data` or `pois`.
+             # Or we simply rely on user input string parts?
+             # Better: Use Geoapify result if available?
+             # For now, simplistic parse:
+             parts = addr_to_geocode.split(",")
+             if len(parts) >= 3:
+                 state_val = parts[-1].strip().split(" ")[0]
+                 city_val = parts[-2].strip()
+                 # Basic sanity
+                 if len(state_val) == 2: state_in = state_val
+                 if len(city_val) > 2: city_in = city_val
+        
+        price_trend_res = (None, None)
+        if zip_code:
+            res_val, res_lvl = data.get_home_price_trend(zip_code, rentcast_key, city=city_in, state=state_in)
+            if res_val is not None: 
+                count_rentcast += 1
+                price_trend_res = (res_val, res_lvl)
+        st.session_state.price_trend = price_trend_res
+
+        # 4d. FEMA Climate Risk [NEW]
+        # Uses geoid info from Census Data step
+        fema_risk = None
+        if census_data and "location_identifiers" in census_data:
+             fema_risk = data.get_fema_disaster_risk(census_data["location_identifiers"])
+        if census_data and "location_identifiers" in census_data:
+             fema_risk = data.get_fema_disaster_risk(census_data["location_identifiers"])
+        st.session_state.fema_risk = fema_risk
+
+        # 4e. Noise Level [NEW]
+        noise_data = data.get_transportation_noise_level(lat, lon)
+        st.session_state.noise_data = noise_data
+
         # 5. LLM Analysis
         # Get Weights (just defaults for now or from config if enabled)
         weights = {"cashflow": 50, "appreciation": 50} 
@@ -837,6 +915,126 @@ with col2:
                  r2_c1, r2_c2 = st.columns(2)
                  with r2_c1: st.plotly_chart(charts["race"], key="chart_race", use_container_width=True)
                  with r2_c2: st.plotly_chart(charts["education"], key="chart_edu", use_container_width=True)
+                 
+                 # Extra Metrics Grid (4 Rows x 2 Columns)
+                 st.markdown("---")
+                 c_met = st.session_state.census_data.get("metrics", {})
+                 
+                 # Helpers
+                 def get_val(k): return c_met.get(k, {}).get("local", 0)
+                 
+                 # Values
+                 val_home = get_val("median_home_value_raw")
+                 if not val_home: val_home = get_val("median_home_value") # fallback
+                 
+                 val_tax = get_val("median_re_taxes")
+                 val_rent_ratio = get_val("renter_ratio")
+                 val_unemp = get_val("unemployment_rate")
+                 val_pop_growth = get_val("population_growth") 
+                 
+                 # Formatters
+                 def fmt_dlr_full(v): 
+                     return f"${v:,.0f}" if v and v > 0 else "N/A"
+                 def fmt_pct(v): 
+                     return f"{v}%" if v is not None else "N/A"
+                 def fmt_trend(v):
+                     if v is None: return "N/A"
+                     sym = "+" if v > 0 else ""
+                     return f"{sym}{v}%"
+
+                 # CSS for Grid Spacing & Value Size
+                 st.markdown("""
+                 <style>
+                 div[data-testid="metric-container"] {
+                    background-color: #F8F9FA;
+                    padding: 10px;
+                    border-radius: 8px;
+                    margin-bottom: 10px;
+                 }
+                 div[data-testid="metric-container"] > label {
+                    font-size: 0.85rem !important;
+                    color: #555 !important;
+                 }
+                 div[data-testid="metric-container"] > div[data-testid="stMetricValue"] {
+                    font-size: 1.5rem !important;
+                 }
+                 </style>
+                 """, unsafe_allow_html=True)
+
+                 # Row 1: Median Home Value | Renter Ratio
+                 g1_c1, g1_c2 = st.columns(2)
+                 with g1_c1:
+                     st.metric("Median Home Value", fmt_dlr_full(val_home), help="Median value of owner-occupied units")
+                 with g1_c2:
+                     st.metric("Renter Ratio", fmt_pct(val_rent_ratio))
+                     
+                 # Row 2: Median Taxes | Home Price YoY
+                 g2_c1, g2_c2 = st.columns(2)
+                 with g2_c1:
+                     st.metric("Median RE Taxes", fmt_dlr_full(val_tax))
+                 with g2_c2:
+                     pt_val, pt_lvl = st.session_state.get("price_trend", (None, None))
+                     st.metric("Home Price (YoY)", fmt_trend(pt_val), help=f"Median Sale Price Trend. Data Level: {pt_lvl or 'Zip'}")
+
+                 # Row 3: Pop Growth | Unemployment Rate
+                 g3_c1, g3_c2 = st.columns(2)
+                 with g3_c1:
+                     st.metric("Population Growth", fmt_trend(val_pop_growth), help="Population Growth (Census)")
+                 with g3_c2:
+                     st.metric("Unemployment Rate", fmt_pct(val_unemp))
+
+                 # Row 4: Noise Level | Climate Risk
+                 g4_c1, g4_c2 = st.columns(2)
+                 with g4_c1:
+                     # Noise
+                     val_noise = st.session_state.get("noise_data")
+                     if val_noise:
+                         db = val_noise.get("max_db", 0)
+                         if db > 0:
+                             severity = "High" if db >= 70 else "Medium" if db >= 55 else "Low"
+                             color_icon = "🔴" if db >= 70 else "🟠" if db >= 55 else "🟢"
+                             srcs = ", ".join(val_noise.get("sources", []))
+                             st.metric("Noise Level", f"{db} dB", delta=f"{color_icon} {severity}", delta_color="off", help=f"Sources: {srcs}")
+                         else:
+                             st.metric("Noise Level", "<45 dB", delta="🟢 Low Risk", delta_color="off")
+                     else:
+                         st.metric("Noise Level", "N/A")
+                         
+                 with g4_c2:
+                     # Climate
+                     val_fema = st.session_state.get("fema_risk")
+                     if val_fema:
+                         count = val_fema.get('count', 0)
+                         top = val_fema.get('top_hazard', 'None')
+                         st.metric("Climate Risk", f"{count} Events", delta=f"Top: {top}", delta_color="off", help="FEMA Declarations since 2000")
+                     else:
+                         st.metric("Climate Risk", "N/A")
+                 
+                 # Data Source / Citations
+                 citations = st.session_state.census_data.get("metrics", st.session_state.census_data.get("citations", {})) # Guard against structure variation
+                 # Actually 'citations' is separate key in data.py
+                 citations = st.session_state.census_data.get("citations", {})
+                 
+                 # Census Level
+                 c_level = st.session_state.census_data.get("data_level", "Block Group")
+                 trend_data = st.session_state.get("price_trend", (None, None))
+                 trend_lvl = trend_data[1] if trend_data else None
+
+                 if citations or trend_lvl:
+                      with st.expander("ℹ️ Data Sources & Verification"):
+                          st.markdown(f"**Census Data Level:** {c_level} (Used for Taxes/Values)")
+                          if trend_lvl:
+                              st.markdown(f"**Home Price Trend Source:** RentCast ({trend_lvl} Level Data)")
+                          
+                          st.markdown(f"**Source:** {citations.get('source', 'US Census Bureau')}")
+                          urls = citations.get("urls", {})
+                          st.markdown(f"""
+                          - **Employment Data (B23025):** [Verify Definition]({urls.get('Employment','#')})
+                          - **Real Estate Taxes (B25103):** [Verify Definition]({urls.get('Taxes','#')})
+                          - **Tenure/Renters (B25003):** [Verify Definition]({urls.get('Tenure','#')})
+                          - **General Search:** [data.census.gov]({urls.get('General','#')})
+                          """)
+                          st.caption("Note: 'Median RE Taxes' of $0 or 'N/A' often indicates insufficient data for the specific block group or no owner-occupied units with mortgages recorded.")
             else:
                  st.info("No census charts available.")
 
@@ -1050,9 +1248,10 @@ with col3:
                         st.warning("List is empty.")
                 else:
                     st.error(f"Unexpected type: {val}")
-                    
             except Exception as e:
-                st.error(f"Debug Error: {e}")
+                st.error(f"Debug Error: {e}") 
+        
+        # 1. Target Property (Red Star)
 
         # 1. Target Property (Red Star)
         folium.Marker(
@@ -1107,6 +1306,312 @@ with col3:
              
         legend_html += '</div>'
         st.markdown(legend_html, unsafe_allow_html=True)
+
+    # Card E (New Placement): Investment Type & AI Insight Summary
+    # If Custom Scoring is Enabled, we might want to prioritize that display or show BOTH?
+    # User said: "Stability Score should have a mark to let user know that there is some missing data."
+    
+    use_custom = st.session_state.get("enable_custom_score", False)
+    
+    if use_custom:
+        with st.container(border=True):
+            st.markdown("### 🏆 AI Location Score (Stability)")
+            
+            # Retrieve Weights
+            weights = st.session_state.get("custom_weights", {"school": 50, "crime": 20, "amenity": 20, "income": 10, "transit": 0})
+            
+            # --- CALCULATE FACTORS ---
+            
+            # 1. School Quality (Percentile based on Rating)
+            # Fetch Schools
+            schools_list = st.session_state.get("schools", [])
+            # Find closest/best school? Usually assigned school. We use max rating found for now.
+            max_rating = 0
+            # If we don't have ratings in DB, this stays 0.
+            # Assuming 'schools' list might have 'rating' key if we updated data.py?
+            # Check data.py logic? We didn't change data.py to fetch ratings from GreatSchools API, only Supabase.
+            # Supabase might not have ratings. Assuming 0 (Missing) if not found.
+            # For demonstration, if we had ratings:
+            for s in schools_list:
+                r = s.get("rating", 0) # Assumes 'rating' key exists
+                if r > max_rating: max_rating = r
+            
+            score_school = 0
+            if max_rating >= 10: score_school = 100
+            elif max_rating >= 9: score_school = 95
+            elif max_rating >= 8: score_school = 90
+            elif max_rating >= 7: score_school = 80
+            elif max_rating >= 6: score_school = 70
+            elif max_rating >= 5: score_school = 60
+            elif max_rating >= 4: score_school = 50
+            elif max_rating >= 3: score_school = 40
+            elif max_rating >= 2: score_school = 30
+            elif max_rating >= 1: score_school = 20
+            else: score_school = 0 # Missing
+            
+            # 2. Crime (Min-Max)
+            # Data Missing -> 0
+            score_crime = 0
+            
+            # 3. Amenities (Rubric)
+            pois_list = st.session_state.get("poi_data", [])
+            poi_count = len(pois_list) if isinstance(pois_list, list) else 0
+            
+            score_amenity = 0
+            # New Rubric:
+            # > 50 -> 100
+            # 40-49 -> 85
+            # 30-39 -> 70
+            # 20-29 -> 50
+            # 10-19 -> 30
+            # < 10 -> 10
+            if poi_count > 50: score_amenity = 100
+            elif poi_count >= 40: score_amenity = 85
+            elif poi_count >= 30: score_amenity = 70
+            elif poi_count >= 20: score_amenity = 50
+            elif poi_count >= 10: score_amenity = 30
+            else: score_amenity = 10
+            
+            # 4. Income (Ratio Table)
+            # National Median 2022 (approx) = 75149
+            nat_inc = 75149
+            loc_inc = st.session_state.census_data.get("metrics", {}).get("median_income", {}).get("local", 0)
+            
+            score_income = 0
+            if loc_inc > 0:
+                ratio = loc_inc / nat_inc
+                if ratio > 1.5: score_income = 100
+                elif ratio >= 1.3: score_income = 90
+                elif ratio >= 1.1: score_income = 80
+                elif ratio >= 0.9: score_income = 70
+                elif ratio >= 0.7: score_income = 50
+                elif ratio >= 0.5: score_income = 30
+                else: score_income = 10
+            
+            # 5. Transit (Missing)
+            score_transit = 0
+            
+            # --- STABILITY SCORE ---
+            # Wi * Xi
+            # Normalize weights if sum != 100
+            tot_w = sum(weights.values())
+            stability_score = 0
+            if tot_w > 0:
+                weighted_sum = (score_school * weights["school"]) + \
+                               (score_crime * weights["crime"]) + \
+                               (score_amenity * weights["amenity"]) + \
+                               (score_income * weights["income"]) + \
+                               (score_transit * weights["transit"])
+                stability_score = weighted_sum / tot_w
+                
+            # Formatting
+            st.metric("Stability Score", f"{stability_score:.1f}/100")
+            
+            # Breakdown Table
+            st.markdown("#### Factor Breakdown")
+            
+            factors = [
+                {"Factor": "School Quality", "Weight": f"{weights['school']}%", "Score": score_school},
+                {"Factor": "Crime Rate", "Weight": f"{weights['crime']}%", "Score": 0, "Note": "Data Unavailable"},
+                {"Factor": "Amenities", "Weight": f"{weights['amenity']}%", "Score": score_amenity, "Note": f"{poi_count} POIs"},
+                {"Factor": "Income Level", "Weight": f"{weights['income']}%", "Score": score_income},
+                {"Factor": "Transit", "Weight": f"{weights['transit']}%", "Score": 0, "Note": "Data Unavailable"},
+            ]
+            
+            # Simple HTML Table
+            rows = ""
+            for f in factors:
+                n = f.get("Note", "")
+                rows += f"<tr><td>{f['Factor']}</td><td>{f['Weight']}</td><td>{f['Score']}</td><td style='font-size:0.8em; color:#666;'>{n}</td></tr>"
+                
+            st.markdown(f"""
+            <table style="width:100%; border-collapse: collapse;">
+                <tr style="border-bottom:1px solid #ddd; text-align:left;"><th>Factor</th><th>Weight</th><th>Score</th><th>Notes</th></tr>
+                {rows}
+            </table>
+            """, unsafe_allow_html=True)
+            
+            if score_crime == 0 or score_transit == 0:
+                st.caption("⚠️ Some factors (Crime, Transit) assume score 0 due to missing data.")
+
+    # Card: Investment Analysis (Standard) - Always Show or Custom Only?
+    # User said "Add AI Location Score... ENABLED ONLY WHEN...". 
+    # Implies Standard Logic runs by default. 
+    # If Custom is ON, do we hide Standard?
+    # User didn't say to hide standard. Let's keep Standard as "Investment Analysis" and Custom as "Location Score".
+    
+    with st.container(border=True):
+        st.markdown("### Investment Analysis")
+        
+        # --- MARKET SCORE / INVESTMENT TYPE LOGIC ---
+        # 1. Gather Data
+        
+        # A. Rent-to-Price Ratio (30%)
+        # Needs Rent (RentCast estimated_rent) and Price (User Input)
+        score_rtp = 0
+        w_rtp = 30
+        
+        # Guard against None
+        rent_d = st.session_state.get("rent_data") or {}
+        # Fetch estimated rent or fall back to 'rent'
+        rent_val= rent_d.get("estimated_rent", 0) 
+        if not rent_val: rent_val = rent_d.get("rent", 0)
+        
+        price_val = st.session_state.get("input_home_price", 0)
+        
+        val_rtp_ratio = 0
+        if rent_val > 0 and price_val > 0:
+            val_rtp_ratio = (rent_val / price_val) * 100
+            # Thresholds:
+            # >= 0.8% -> Cash Flow (Score 0 based on mapping logic? user said: "≥ 0.8% → Cash Flow")
+            # Wait, Scoring Logic:
+            # User: "Market Score < 40 → Cash Flow", "Market Score ≥ 65 → Appreciation"
+            # Component Thresholds:
+            # RTP >= 0.8% -> Cash Flow. 
+            # If Cash Flow is "Low Score" (0), then >= 0.8% should give 0?
+            # User: "For any reason, that any aspect is N/A... set weight 0".
+            # Let's align "Appreciation" = 100, "Cash Flow" = 0.
+            # RTP: >= 0.8% (Cash Flow) -> 0. < 0.5% (Appreciation) -> 100.
+            if val_rtp_ratio < 0.5: score_rtp = 100
+            elif val_rtp_ratio < 0.8: score_rtp = 50
+            else: score_rtp = 0
+        else:
+            w_rtp = 0 # N/A
+
+        # B. Home Price Trend (25%)
+        score_trend = 0
+        w_trend = 25
+        
+        pt_val, _ = st.session_state.get("price_trend", (None, None))
+        if pt_val is not None:
+            # +5% -> Appr (100)
+            # -2 to 5 -> Neutral (50)
+            # < -2 -> Cash Flow (0)
+            if pt_val >= 5: score_trend = 100
+            elif pt_val >= -2: score_trend = 50
+            else: score_trend = 0
+        else:
+            w_trend = 0
+
+        # C. Pop Growth (15%) - Prefer 5-Year
+        score_pop = 0
+        w_pop = 15
+        
+        # Check metrics
+        census_d = st.session_state.get("census_data") or {}
+        metrics = census_d.get("metrics", {})
+        pg_5y = metrics.get("pop_growth_5y", {}).get("local")
+        
+        if pg_5y is not None:
+            # +3% -> Appr (100)
+            # -2 to 3 -> Neutral (50)
+            # < -2 -> Cash Flow (0)
+            if pg_5y >= 3: score_pop = 100
+            elif pg_5y >= -2: score_pop = 50
+            else: score_pop = 0
+        else:
+            w_pop = 0
+
+        # D. Income Growth (10%)
+        score_inc = 0
+        w_inc = 10
+        
+        ig_5y = metrics.get("income_growth_5y", {}).get("local")
+        if ig_5y is not None:
+            # +5% -> Appr (100)
+            # 0-5 -> Neutral (50)
+            # < 0 -> Cash Flow (0)
+            if ig_5y >= 5: score_inc = 100
+            elif ig_5y >= 0: score_inc = 50
+            else: score_inc = 0
+        else:
+            w_inc = 0
+
+        # E. Effective Tax Rate (10%)
+        score_tax = 0
+        w_tax = 10
+        
+        m_tax = metrics.get("median_re_taxes", {}).get("local", 0)
+        m_val = metrics.get("median_home_value_raw", {}).get("local", 0)
+        
+        if m_val > 0:
+            eff_tax = (m_tax / m_val) * 100
+            # > 2% -> Appr (100) (User rule: Appreciation (cash flow suppressed)) -> Wait. 
+            # User said: "2% → Appreciation (cash flow suppressed)". 
+            # Usually high tax -> bad for cash flow -> good for appreciation? 
+            # If logic is Appr=100, then Tax>2% = 100.
+            # < 1% -> Cash Flow -> 0.
+            if eff_tax > 2: score_tax = 100
+            elif eff_tax >= 1: score_tax = 50
+            else: score_tax = 0
+        else:
+            w_tax = 0
+
+        # F. Renter Ratio (10%)
+        score_rent = 0
+        w_rent = 10
+        
+        rr_val = metrics.get("renter_ratio", {}).get("local")
+        if rr_val is not None:
+            # < 30 -> Appr (100)
+            # 30-45 -> Mixed (50)
+            # > 45 -> Cash Flow (0)
+            if rr_val < 30: score_rent = 100
+            elif rr_val <= 45: score_rent = 50
+            else: score_rent = 0
+        else:
+            w_rent = 0
+            
+        # CALCULATION
+        total_weight = w_rtp + w_trend + w_pop + w_inc + w_tax + w_rent
+        final_market_score = 0
+        inv_type = "N/A"
+        
+        if total_weight > 0:
+            weighted_sum = (score_rtp * w_rtp) + (score_trend * w_trend) + \
+                           (score_pop * w_pop) + (score_inc * w_inc) + \
+                           (score_tax * w_tax) + (score_rent * w_rent)
+                           
+            # Normalize to 100 scale?
+            # If total_weight < 100, we need to scale up?
+            # User: "re-normalize other factors".
+            # Formula: weighted_sum / total_weight.
+            # Example: Only Rent-to-Price (30) avail. Score 100.
+            # Weighted Sum = 3000. Total Weight = 30. Result = 100. Correct.
+            
+            final_market_score = weighted_sum / total_weight
+            final_market_score = int(round(final_market_score))
+            
+            # Determine Type
+            if final_market_score >= 65: inv_type = "Appreciation"
+            elif final_market_score >= 40: inv_type = "Mixed"
+            else: inv_type = "Cash Flow"
+        
+        # DISPLAY
+        # Color coding
+        c_color = "green" if inv_type == "Appreciation" else "orange" if inv_type == "Mixed" else "blue"
+        
+        st.markdown(f"""
+        <div style="background-color: #f0f2f6; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <h4 style="margin:0; color:#333;">Investment Type: <span style="color:{c_color}">{inv_type}</span></h4>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # LLM Result Display
+        llm_res_text = ""
+        res_obj = st.session_state.get("llm_result", {})
+        if res_obj:
+             llm_res_text = res_obj.get("analysis", "")
+             
+        if llm_res_text:
+            st.write(llm_res_text)
+        elif st.session_state.get("processing", False):
+            st.spinner("Generating AI Analysis...")
+        else:
+             if st.session_state.get("census_data"):
+                 st.info("Analysis Ready. See metrics above.")
+             else:
+                 st.info("Click 'Analyze' to generate AI insights.")
 
     # Card G: Nearby Schools [NEW]
     with st.container(border=True):

@@ -1,10 +1,14 @@
 {
     "model_name": "gemini-2.5-flash",
     "temperature": 0.7,
+    "delivery_method": "Screen",
     "customized_scoring_method": false,
     "cache_ttl_hours": 240,
     "enable_daily_limit": true,
-    "whitelist_emails": [],
+    "daily_limit_count": 3,
+    "whitelist_emails": [
+        "tanshuai2008@gmail.com"
+    ],
     "enable_geoapify": true,
     "enable_rentcast": true,
     "enable_census": true,

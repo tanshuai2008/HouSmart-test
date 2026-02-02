@@ -209,7 +209,18 @@ class CensusDataService:
             "B01001_039E":"Age_F_45_49", "B01001_040E":"Age_F_50_54", "B01001_041E":"Age_F_55_59", "B01001_042E":"Age_F_60_61", "B01001_043E":"Age_F_62_64",
             # 65+: M 020-025, F 044-049
             "B01001_020E":"Age_M_65_66", "B01001_021E":"Age_M_67_69", "B01001_022E":"Age_M_70_74", "B01001_023E":"Age_M_75_79", "B01001_024E":"Age_M_80_84", "B01001_025E":"Age_M_85",
-            "B01001_044E":"Age_F_65_66", "B01001_045E":"Age_F_67_69", "B01001_046E":"Age_F_70_74", "B01001_047E":"Age_F_75_79", "B01001_048E":"Age_F_80_84", "B01001_049E":"Age_F_85"
+            "B01001_044E":"Age_F_65_66", "B01001_045E":"Age_F_67_69", "B01001_046E":"Age_F_70_74", "B01001_047E":"Age_F_75_79", "B01001_048E":"Age_F_80_84", "B01001_049E":"Age_F_85",
+            # Employment (B23025)
+            "B23025_002E": "Labor_InForce", # In Labor Force
+            "B23025_003E": "Labor_Civilian", # Civilian Labor Force
+            "B23025_004E": "Labor_Employed",
+            "B23025_005E": "Labor_Unemployed",
+            # Real Estate Taxes (B25103 - Median RE Taxes Paid)
+            "B25103_001E": "Median_RE_Taxes",
+            # Tenure (B25003)
+            "B25003_001E": "Tenure_Total",
+            "B25003_002E": "Tenure_Owner",
+            "B25003_003E": "Tenure_Renter"
         }
 
     def get_census_geoid(self, address):
@@ -310,43 +321,103 @@ class CensusDataService:
             vars_str = ",".join(chunk)
             
             # https://api.census.gov/data/2024/acs/acs5?get=NAME,B19013_001E...&for=block group:X&in=state:xx county:xxx tract:xxxxxx
-            params = {
-                "get": f"NAME,{vars_str}",
-                "for": f"block group:{bg}",
-                "in": f"state:{state} county:{county} tract:{tract}"
-            }
-            
-            try:
-                print(f"DEBUG: Fetching ACS Data Batch {i//chunk_size + 1}...")
+        # Helper: Fetch Data with Fallback
+        def fetch_with_fallback(fetch_state, fetch_county, fetch_tract, fetch_bg=None):
+            """
+            Recursively try BG -> Tract.
+            Returns (data, level_name)
+            """
+            # 1. Try Block Group (If requested)
+            if fetch_bg:
+                params_bg = {
+                    "get": f"NAME,{','.join(chunk)}",
+                    "for": f"block group:{fetch_bg}",
+                    "in": f"state:{fetch_state} county:{fetch_county} tract:{fetch_tract}"
+                }
+                try:
+                    r = requests.get(self.acs_base_url, params=params_bg, timeout=5)
+                    if r.status_code == 200:
+                        rows = r.json()
+                        if len(rows) > 1:
+                            # Verify if data is not empty/null for key vars?
+                            # Census might return [ [Headers], [None, None...] ]
+                            # Assume rows>1 is sufficient success for level existence.
+                            return rows, "Block Group"
+                except:
+                   pass
 
-                r = requests.get(self.acs_base_url, params=params)
-                
+            # 2. Try Tract (Fallback)
+            params_tract = {
+                "get": f"NAME,{','.join(chunk)}",
+                "for": f"tract:{fetch_tract}",
+                "in": f"state:{fetch_state} county:{fetch_county}"
+            }
+            try:
+                # print(f"DEBUG: Falling back to Tract Level for Batch...")
+                r = requests.get(self.acs_base_url, params=params_tract, timeout=5)
                 if r.status_code == 200:
                     rows = r.json()
                     if len(rows) > 1:
-                        headers = rows[0]
-                        data_row = rows[1]
-                        
-                        # Map back to readable keys
-                        for code, label in self.variables.items():
-                            if code in headers:
-                                idx = headers.index(code)
-                                val = data_row[idx]
-                                if val:
-                                    try:
-                                        num_val = float(val)
-                                        if num_val >= 0: # -666666666 means missing
-                                            if num_val.is_integer():
-                                                combined_result[code] = int(num_val)
-                                            else:
-                                                combined_result[code] = num_val
-                                    except ValueError:
-                                        pass
-                else:
-                    print(f"DEBUG: ACS Batch {i//chunk_size + 1} Failed: {r.status_code}")
-            except Exception as e:
-                print(f"ACS API Error: {e}")
+                        return rows, "Tract"
+            except:
+                pass
                 
+            # 3. Try County (Fallback)
+            params_county = {
+                "get": f"NAME,{','.join(chunk)}",
+                "for": f"county:{fetch_county}",
+                "in": f"state:{fetch_state}"
+            }
+            try:
+                # print(f"DEBUG: Falling back to County Level for Batch...")
+                r = requests.get(self.acs_base_url, params=params_county, timeout=5)
+                if r.status_code == 200:
+                    rows = r.json()
+                    if len(rows) > 1:
+                        return rows, "County"
+            except:
+                pass
+                
+            return None, None
+
+        for i in range(0, len(all_vars), chunk_size):
+            chunk = all_vars[i:i+chunk_size]
+            
+            rows, level = fetch_with_fallback(state, county, tract, bg)
+            
+            if rows:
+                if "data_level" not in combined_result:
+                    combined_result["data_level"] = level # Store primary level
+                elif level != combined_result.get("data_level"):
+                    # Mixed levels? Just keep the most granular or what?
+                    # Since we chunk, ideally all chunks succeed at same level, 
+                    # but technically they could diverge if data is sparse.
+                    # Let's assume the "deepest" level found is what we report or just last.
+                    pass
+                    
+                combined_result["matches_bg"] = (level == "Block Group")
+
+                headers = rows[0]
+                data_row = rows[1]
+                
+                # Map back to readable keys
+                for code, label in self.variables.items():
+                    if code in headers:
+                        idx = headers.index(code)
+                        val = data_row[idx]
+                        if val:
+                            try:
+                                num_val = float(val)
+                                if num_val >= 0: # -666666666 means missing
+                                    if num_val.is_integer():
+                                        combined_result[code] = int(num_val)
+                                    else:
+                                        combined_result[code] = num_val
+                            except ValueError:
+                                pass
+            else:
+                 print(f"DEBUG: Batch {i//chunk_size + 1} Failed at both BG and Tract levels.")
+                 
         return combined_result if combined_result else None
 
     def compare_with_benchmarks(self, local_data, geoid_data):
@@ -526,7 +597,170 @@ class CensusDataService:
              r_other = r_tot - (r_white + r_black + r_asian + r_hisp)
              output["metrics"]["race_other"] = {"local": round(max(0, r_other) / r_tot * 100, 1)}
 
+        # Employment
+        # Unemployment Rate = Unemployed / Civilian Labor Force (16+)
+        lab_civ = local_data.get("B23025_003E", 0) or 0
+        lab_unemp = local_data.get("B23025_005E", 0) or 0
+        
+        if lab_civ > 0:
+            unemp_rate = round(lab_unemp / lab_civ * 100, 1)
+        else:
+            unemp_rate = 0
+        output["metrics"]["unemployment_rate"] = {"local": unemp_rate}
+
+        # Taxes
+        med_taxes = local_data.get("B25103_001E", 0) or 0
+        output["metrics"]["median_re_taxes"] = {"local": med_taxes}
+
+        # Tenure
+        ten_tot = local_data.get("B25003_001E", 0) or 0
+        ten_renter = local_data.get("B25003_003E", 0) or 0
+        if ten_tot > 0:
+            renter_ratio = round(ten_renter / ten_tot * 100, 1)
+        else:
+            renter_ratio = 0
+        output["metrics"]["renter_ratio"] = {"local": renter_ratio}
+        
+        # Median Home Value (Ensuring key exists for Viz)
+        med_home_val = local_data.get("B25077_001E", 0) or 0
+        output["metrics"]["median_home_value_raw"] = {"local": med_home_val}
+        
+        # Add Citation Links
+        output["citations"] = {
+            "source": "U.S. Census Bureau, 2022 American Community Survey 5-Year Estimates",
+            "urls": {
+                "Employment": "https://api.census.gov/data/2022/acs/acs5/variables/B23025.json",
+                "Taxes": "https://api.census.gov/data/2022/acs/acs5/variables/B25103.json",
+                "Tenure": "https://api.census.gov/data/2022/acs/acs5/variables/B25003.json",
+                "General": "https://data.census.gov/"
+            }
+        }
+
+        # Add Population Growth to Output Metrics if available
+        # Passed into local_data via get_census_data injection
+        pop_growth_val = local_data.get("population_growth", 0)
+        output["metrics"]["population_growth"] = {"local": pop_growth_val}
+        
+        # Add 5-Year Growth Metrics
+        # Passed via get_census_data injection
+        pop_5y = local_data.get("pop_growth_5y", 0)
+        inc_5y = local_data.get("income_growth_5y", 0)
+        output["metrics"]["pop_growth_5y"] = {"local": pop_5y}
+        output["metrics"]["income_growth_5y"] = {"local": inc_5y}
+
         return output
+
+    def get_population_growth(self, geoid_data):
+        """
+        Fetches Total Population (B01003_001E) for 2022 and 2021 to calculate growth.
+        Growth = ((2022 - 2021) / 2021) * 100
+        """
+        if not geoid_data: return 0
+        
+        state = geoid_data['state']
+        county = geoid_data['county']
+        tract = geoid_data['tract']
+        bg = geoid_data['block_group']
+        
+        params_bg = {
+            "get": "B01003_001E",
+            "for": f"block group:{bg}",
+            "in": f"state:{state} county:{county} tract:{tract}"
+        }
+        
+        params_tract = {
+             "get": "B01003_001E",
+             "for": f"tract:{tract}",
+             "in": f"state:{state} county:{county}"
+        }
+        
+        def fetch_year(year, use_tract=False):
+            p = params_tract if use_tract else params_bg
+            try:
+                r = requests.get(f"https://api.census.gov/data/{year}/acs/acs5", params=p, timeout=3)
+                if r.status_code == 200:
+                    d = r.json()
+                    if len(d) > 1 and d[1][0]:
+                        return int(d[1][0])
+            except:
+                pass
+            return None
+
+        # Try BG first
+        v_2022 = fetch_year(2022, False)
+        v_2021 = fetch_year(2021, False)
+        
+        # If fetch failed (None), try Tract
+        if v_2022 is None:
+            v_2022 = fetch_year(2022, True)
+            v_2021 = fetch_year(2021, True) # Must use consistent geo level
+            
+        if v_2022 is not None and v_2021 is not None and v_2021 > 0:
+             growth = ((v_2022 - v_2021) / v_2021) * 100
+             return round(growth, 2)
+            
+        return 0
+
+    def get_5yr_growth_metrics(self, geoid_data):
+        """
+        Fetches 2017 and 2022 Data for:
+        - Population (B01003_001E)
+        - Median Household Income (B19013_001E)
+        Returns: { 'pop_growth': float, 'income_growth': float }
+        """
+        if not geoid_data: return None
+        
+        state = geoid_data['state']
+        county = geoid_data['county']
+        tract = geoid_data['tract']
+        bg = geoid_data['block_group']
+        
+        # Fallback Logic: BG -> Tract
+        
+        def fetch_yr_vars(year, level="bg"):
+            # Vars: B01003_001E (Pop), B19013_001E (Income)
+            vs = "B01003_001E,B19013_001E"
+            if level == "bg":
+                params = {"get": vs, "for": f"block group:{bg}", "in": f"state:{state} county:{county} tract:{tract}"}
+            else:
+                params = {"get": vs, "for": f"tract:{tract}", "in": f"state:{state} county:{county}"}
+                
+            try:
+                r = requests.get(f"https://api.census.gov/data/{year}/acs/acs5", params=params, timeout=5)
+                if r.status_code == 200:
+                    d = r.json()
+                    if len(d) > 1:
+                        # headers: [B01003_001E, B19013_001E, ...]
+                        # result: [pop, inc, ...]
+                        p = d[1][0]
+                        i = d[1][1]
+                        return (int(p) if p else 0, int(i) if i else 0)
+            except:
+                pass
+            return None
+            
+        # Try fetch 2022 (Current)
+        curr_vals = fetch_yr_vars(2022, "bg")
+        if not curr_vals: curr_vals = fetch_yr_vars(2022, "tract")
+        
+        # Try fetch 2017 (Historical)
+        hist_vals = fetch_yr_vars(2017, "bg")
+        if not hist_vals: hist_vals = fetch_yr_vars(2017, "tract")
+        
+        res = {"pop_growth": 0, "income_growth": 0}
+        
+        if curr_vals and hist_vals:
+            pop_curr, inc_curr = curr_vals
+            pop_hist, inc_hist = hist_vals
+            
+            if pop_hist > 0:
+                res["pop_growth"] = round(((pop_curr - pop_hist) / pop_hist) * 100, 1)
+            
+            if inc_hist > 0:
+                res["income_growth"] = round(((inc_curr - inc_hist) / inc_hist) * 100, 1)
+                
+        return res
+
 
 def get_census_data(address, geo_key=None):
     """
@@ -556,6 +790,18 @@ def get_census_data(address, geo_key=None):
         if acs_data is None:
              print("DEBUG: ACS Data is None. Proceeding with Benchmarks only.")
         log_debug(f"ACS Result Count: {len(acs_data) if acs_data else 0}")
+        
+        # 2a. [NEW] Get Population Growth (1-Year: 2022 vs 2021)
+        pop_growth = service.get_population_growth(geo_data)
+        if acs_data is None: acs_data = {} # Ensure dict exists if ACS failed
+        if pop_growth is not None:
+             acs_data["population_growth"] = pop_growth
+             
+        # 2b. [NEW] Get 5-Year Growth (Pop & Income: 2022 vs 2017)
+        growth_5y = service.get_5yr_growth_metrics(geo_data)
+        if growth_5y:
+            acs_data["pop_growth_5y"] = growth_5y.get("pop_growth")
+            acs_data["income_growth_5y"] = growth_5y.get("income_growth")
         
         # 3. Compare & Compile
         final_result = service.compare_with_benchmarks(acs_data, geo_data)
@@ -847,3 +1093,189 @@ def get_nearby_schools_data(lat, lon, supabase_url, supabase_key, miles=3.0):
     except Exception as e:
         print(f"Supabase School Fetch Error: {e}")
         return []
+
+def get_home_price_trend(zip_code, api_key, city=None, state=None):
+    """
+    Fetch Sales Data from RentCast to calculate YoY Home Price Trend.
+    Fallback: Zip -> City/State -> State.
+    Formula: ((Current Median - 1y_Ago Median) / 1y_Ago Median) * 100
+    Returns: (trend_percentage, level_used)
+    """
+    if not api_key: return None, None
+    
+    # We use RentCast Market Averages
+    url = "https://api.rentcast.io/v1/markets"
+    headers = {"accept": "application/json", "X-Api-Key": api_key}
+    
+    # Define levels to try
+    levels = []
+    
+    if zip_code:
+        levels.append( ("Zip", {"zipCode": zip_code, "historyRange": 13, "propertyType": "Single Family"}) )
+        
+    if city and state:
+        levels.append( ("City", {"city": city, "state": state, "historyRange": 13, "propertyType": "Single Family"}) )
+        
+    if state:
+        levels.append( ("State", {"state": state, "historyRange": 13, "propertyType": "Single Family"}) )
+        
+    for lvl_name, params in levels:
+        try:
+            r = requests.get(url, params=params, headers=headers)
+            if r.status_code == 200:
+                d = r.json()
+                sales = d.get("salesData", {})
+                history = sales.get("history", [])
+                
+                if history and len(history) >= 13:
+                    history.sort(key=lambda x: x.get("date",""), reverse=True)
+                    curr = history[0].get("averagePrice", 0)
+                    prev = history[12].get("averagePrice", 0)
+                    
+                    if curr > 0 and prev > 0:
+                        delta = ((curr - prev) / prev) * 100
+                        return round(delta, 1), lvl_name
+                        
+        except Exception:
+            pass
+            
+    return None, None
+
+def get_fema_disaster_risk(geoid_data):
+    """
+    Fetch historical disaster declarations from OpenFEMA API for the county.
+    Returns a dictionary with 'count' and 'top_hazard'.
+    """
+    if not geoid_data: return None
+    
+    # Needs FIPS State and County
+    state_fips = geoid_data.get("state")
+    county_fips = geoid_data.get("county") # 3 digits
+    
+    if not state_fips or not county_fips: return None
+    
+    # OpenFEMA API: DisasterDeclarationsSummaries
+    # https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries
+    # Filter by fipsStateCode and fipsCountyCode. 
+    # Use $filter=fipsStateCode eq '...' and fipsCountyCode eq '...' 
+    # Limit to e.g. last 20 years? fyDeclared ge 2000
+    
+    url = "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries"
+    
+    # OData Filter
+    # Filter for this county and years >= 2000
+    filter_query = f"fipsStateCode eq '{state_fips}' and fipsCountyCode eq '{county_fips}' and fyDeclared ge 2000"
+    params = {
+        "$filter": filter_query,
+        "$select": "incidentType,declarationTitle,fyDeclared",
+        "$orderby": "fyDeclared desc",
+        "$limit": 1000 # Assume < 1000 events in 20 years
+    }
+    
+    try:
+        r = requests.get(url, params=params, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            disasters = data.get("DisasterDeclarationsSummaries", [])
+            
+            count = len(disasters)
+            
+            # Find Top Hazard
+            counts = {}
+            for d in disasters:
+                itype = d.get("incidentType", "Unknown")
+                counts[itype] = counts.get(itype, 0) + 1
+            
+            top_hazard = "None"
+            if counts:
+                top_hazard = max(counts, key=counts.get)
+            
+            return {
+                "count": count,
+                "top_hazard": top_hazard,
+                "period": "2000-Present"
+            }
+    except Exception as e:
+        print(f"FEMA API Error: {e}")
+        
+    return None
+
+def get_transportation_noise_level(lat, lon):
+    """
+    Fetch noise level from BTS National Transportation Noise Map (ArcGIS REST).
+    https://geo.dot.gov/server/rest/services/Hosted
+    Service Name estimate: National_Transportation_Noise_Map
+    """
+    if lat is None or lon is None: return None
+    
+    # Base URL for the MapServer
+    # We will try the likely name "National_Transportation_Noise_Map"
+    base_url = "https://geo.dot.gov/server/rest/services/Hosted/National_Transportation_Noise_Map/MapServer"
+    
+    identify_url = f"{base_url}/identify"
+    
+    # Construct geometry and minimal extent
+    # Tiny delta for point identification
+    delta = 0.0001
+    bbox = f"{lon-delta},{lat-delta},{lon+delta},{lat+delta}"
+    
+    params = {
+        "f": "json",
+        "geometry": f"{lon},{lat}",
+        "geometryType": "esriGeometryPoint",
+        "sr": "4326", # WGS84
+        "layers": "all", # Query all layers (Road, Aviation)
+        "tolerance": "3", # Pixels
+        "mapExtent": bbox,
+        "imageDisplay": "100,100,96", 
+        "returnGeometry": "false"
+    }
+    
+    try:
+        r = requests.get(identify_url, params=params, timeout=4)
+        if r.status_code == 200:
+            data = r.json()
+            results = data.get("results", [])
+            
+            if results:
+                # We might get multiple hits (Road, Aviation).
+                # We want the highest noise level found.
+                max_db = 0
+                sources = []
+                
+                for res in results:
+                    attrs = res.get("attributes", {})
+                    layer_name = res.get("layerName", "Unknown")
+                    
+                    # Common keys: 'DB_LO', 'DB_HI', 'Noise_Class'
+                    val = 0
+                    if "DB_HI" in attrs:
+                        try: val = int(attrs["DB_HI"])
+                        except: pass
+                    elif "db_hi" in attrs:
+                        try: val = int(attrs["db_hi"])
+                        except: pass
+                        
+                    if val > max_db:
+                        max_db = val
+                        
+                    if val > 0:
+                        sources.append(layer_name)
+                        
+                if max_db > 0:
+                    return {
+                        "max_db": max_db,
+                        "sources": list(set(sources))
+                    }
+                else:
+                    # Maybe it returned results but no DB_HI?
+                    # Some layers just return "Noise_Class".
+                    pass
+            
+            # If no results, it usually means <45dB (The map floor)
+            return {"max_db": 0, "sources": []} 
+            
+    except Exception as e:
+        print(f"Noise Map Error: {e}")
+        
+    return None

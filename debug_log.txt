@@ -18,3 +18,11 @@
 2026-01-13 22:47:44.041943: Geode Result: {'full_geoid': '480396607033', 'state': '48', 'county': '039', 'tract': '660703', 'block_group': '3'}
 2026-01-13 22:47:44.559392: ACS Result Count: 0
 2026-01-13 22:47:44.560322: Final Result Keys: None
+2026-01-15 20:36:45.138462: Starting Census Fetch for: 6612 natasha ct, 60525
+2026-01-15 20:36:46.264180: Geode Result: {'full_geoid': '170318202041', 'state': '17', 'county': '031', 'tract': '820204', 'block_group': '1'}
+2026-01-15 20:36:51.133385: ACS Result Count: 77
+2026-01-15 20:36:57.529186: Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
+2026-01-15 20:43:25.644723: Starting Census Fetch for: 123 Market St, San Francisco, CA
+2026-01-15 20:43:26.223272: Geode Result: {'full_geoid': '060750615071', 'state': '06', 'county': '075', 'tract': '061507', 'block_group': '1'}
+2026-01-15 20:43:31.088109: ACS Result Count: 78
+2026-01-15 20:43:32.731892: Final Result Keys: dict_keys(['location_identifiers', 'metrics', 'benchmarks'])
